@@ -6,8 +6,11 @@
   page.className = 'auth-page';
   page.innerHTML = `
     <div class="auth-card">
-      <div class="auth-brand">SyncMark</div>
-      <div class="lock-icon" id="lock-icon">🔒</div>
+      <div class="auth-brand">
+        <span class="material-symbols-outlined">bookmarks</span>
+        SyncMark
+      </div>
+      <div class="lock-icon"><span class="material-symbols-outlined" id="lock-icon">lock</span></div>
       <h2 id="lock-heading">Sign in</h2>
       <p class="lock-subtitle" id="lock-subtitle">Enter your username and password to unlock SyncMark.</p>
       <form id="lock-form">
@@ -45,7 +48,7 @@
   function showPage(newMode) {
     mode = newMode;
     if (mode === 'setup') {
-      icon.textContent = '👋';
+      icon.textContent = 'waving_hand';
       heading.textContent = 'Welcome to SyncMark';
       subtitle.textContent = "Let's set up the account that keeps your bookmarks yours — pick a username and password to get started.";
       confirmWrap.hidden = false;
@@ -54,7 +57,7 @@
       passwordInput.autocomplete = 'new-password';
       submitBtn.textContent = 'Create account & sign in';
     } else {
-      icon.textContent = '🔒';
+      icon.textContent = 'lock';
       heading.textContent = 'Welcome back';
       subtitle.textContent = 'Sign in to unlock your bookmarks.';
       confirmWrap.hidden = true;
@@ -68,12 +71,37 @@
   }
 
   function enterApp() {
-    page.remove();
-    appShell.hidden = false;
-    document.body.classList.add('bg-animated');
-    const script = document.createElement('script');
-    script.src = nextScriptSrc;
-    document.body.appendChild(script);
+    const reveal = () => {
+      page.remove();
+      appShell.hidden = false;
+      document.body.classList.add('bg-animated');
+      const script = document.createElement('script');
+      script.src = nextScriptSrc;
+      document.body.appendChild(script);
+    };
+
+    // Same-document swap (auth card -> app), distinct from the cross-document
+    // navigation transition handled in ui.js/style.css. Chromium/Safari get a
+    // native crossfade; everyone else gets a short hand-rolled one so the
+    // handoff never feels instant either way.
+    if (typeof document.startViewTransition === 'function') {
+      const transition = document.startViewTransition(reveal);
+      // `.ready`/`.finished` reject (e.g. AbortError) when the browser skips
+      // the transition outright — the reveal callback still runs either way,
+      // so that's not an error worth surfacing, just one to not let go unhandled.
+      transition.ready.catch(() => {});
+      transition.finished.catch(() => {});
+      return;
+    }
+
+    page.classList.add('auth-page-leaving');
+    setTimeout(() => {
+      reveal();
+      appShell.classList.add('app-shell-entering');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => appShell.classList.remove('app-shell-entering'));
+      });
+    }, 220);
   }
 
   form.addEventListener('submit', async (e) => {
@@ -97,12 +125,13 @@
     }
 
     submitBtn.disabled = true;
+    progress.start();
     try {
       const res = await fetch(`/api/auth/${mode === 'setup' ? 'setup' : 'login'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
-      });
+      }).finally(() => progress.done());
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Something went wrong');
       form.reset();
@@ -116,7 +145,8 @@
 
   async function init() {
     try {
-      const res = await fetch('/api/auth/status');
+      progress.start();
+      const res = await fetch('/api/auth/status').finally(() => progress.done());
       const status = await res.json();
       if (status.setupRequired) {
         showPage('setup');

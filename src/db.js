@@ -34,6 +34,8 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    avatar BLOB,
+    avatar_mime TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -62,6 +64,13 @@ if (!existingColumns.some((col) => col.name === 'position')) {
 const existingFolderColumns = db.prepare('PRAGMA table_info(folders)').all();
 if (!existingFolderColumns.some((col) => col.name === 'position')) {
   db.exec('ALTER TABLE folders ADD COLUMN position REAL NOT NULL DEFAULT 0');
+}
+const existingUserColumns = db.prepare('PRAGMA table_info(users)').all();
+if (!existingUserColumns.some((col) => col.name === 'avatar')) {
+  db.exec('ALTER TABLE users ADD COLUMN avatar BLOB');
+}
+if (!existingUserColumns.some((col) => col.name === 'avatar_mime')) {
+  db.exec('ALTER TABLE users ADD COLUMN avatar_mime TEXT');
 }
 
 const SORT_CLAUSES = {
@@ -155,14 +164,27 @@ const statements = {
   ),
 
   countUsers: db.prepare('SELECT COUNT(*) as count FROM users'),
-  getUserByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
-  getUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
+  // Columns are listed explicitly so the avatar BLOB isn't loaded on every
+  // authenticated request — it's fetched only by getAvatar, on demand.
+  getUserByUsername: db.prepare(
+    `SELECT id, username, password_hash, created_at, (avatar IS NOT NULL) AS has_avatar
+     FROM users WHERE username = ?`
+  ),
+  getUserById: db.prepare(
+    `SELECT id, username, password_hash, created_at, (avatar IS NOT NULL) AS has_avatar
+     FROM users WHERE id = ?`
+  ),
   insertUser: db.prepare(
     'INSERT INTO users (username, password_hash) VALUES (@username, @passwordHash)'
   ),
   updateUser: db.prepare(
     'UPDATE users SET username = @username, password_hash = @passwordHash WHERE id = @id'
   ),
+  getAvatar: db.prepare('SELECT avatar, avatar_mime FROM users WHERE id = ?'),
+  setAvatar: db.prepare(
+    'UPDATE users SET avatar = @avatar, avatar_mime = @mime WHERE id = @id'
+  ),
+  clearAvatar: db.prepare('UPDATE users SET avatar = NULL, avatar_mime = NULL WHERE id = @id'),
 
   insertSession: db.prepare(
     'INSERT INTO sessions (token, user_id, expires_at) VALUES (@token, @userId, @expiresAt)'

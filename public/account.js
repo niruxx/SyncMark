@@ -11,8 +11,19 @@ const passwordError = document.getElementById('password-error');
 
 const accountUsernameEl = document.getElementById('account-username');
 
+const avatarPreview = document.getElementById('avatar-preview');
+const avatarFile = document.getElementById('avatar-file');
+const avatarRemoveBtn = document.getElementById('avatar-remove-btn');
+const avatarError = document.getElementById('avatar-error');
+
 async function api(path, options) {
-  const res = await fetch(`/api${path}`, options);
+  progress.start();
+  let res;
+  try {
+    res = await fetch(`/api${path}`, options);
+  } finally {
+    progress.done();
+  }
   if (res.status === 401) {
     location.reload();
     return new Promise(() => {});
@@ -28,12 +39,69 @@ async function api(path, options) {
 async function loadAccount() {
   try {
     const data = await api('/auth/me');
-    accountUsernameEl.textContent = data.username;
+    renderAccountBadge(data);
     newUsernameInput.placeholder = data.username;
+    renderAvatarPreview(data.hasAvatar);
   } catch {
     /* leave placeholders as-is */
   }
 }
+
+// --- Profile picture ---
+
+function renderAvatarPreview(hasAvatar) {
+  avatarPreview.textContent = '';
+  avatarRemoveBtn.hidden = !hasAvatar;
+
+  if (hasAvatar) {
+    const img = document.createElement('img');
+    img.src = `/api/auth/avatar?t=${Date.now()}`;
+    img.alt = 'Your profile picture';
+    avatarPreview.appendChild(img);
+  } else {
+    const icon = document.createElement('span');
+    icon.className = 'material-symbols-outlined';
+    icon.textContent = 'person';
+    avatarPreview.appendChild(icon);
+  }
+}
+
+avatarFile.addEventListener('change', async () => {
+  const file = avatarFile.files[0];
+  if (!file) return;
+  avatarError.hidden = true;
+
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  try {
+    await api('/auth/avatar', { method: 'POST', body: formData });
+    renderAvatarPreview(true);
+    renderAccountBadge({ hasAvatar: true });
+    showToast('Profile picture updated', 'success');
+  } catch (err) {
+    avatarError.textContent = err.message;
+    avatarError.hidden = false;
+  } finally {
+    avatarFile.value = '';
+  }
+});
+
+avatarRemoveBtn.addEventListener('click', async () => {
+  const confirmed = await confirmDialog('Remove your profile picture?', { danger: true });
+  if (!confirmed) return;
+  avatarError.hidden = true;
+
+  try {
+    await api('/auth/avatar', { method: 'DELETE' });
+    renderAvatarPreview(false);
+    renderAccountBadge({ hasAvatar: false });
+    showToast('Profile picture removed', 'success');
+  } catch (err) {
+    avatarError.textContent = err.message;
+    avatarError.hidden = false;
+  }
+});
 
 usernameForm.addEventListener('submit', async (e) => {
   e.preventDefault();

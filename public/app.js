@@ -71,7 +71,13 @@ function makeFaviconImg(url) {
 }
 
 async function api(path, options) {
-  const res = await fetch(`/api${path}`, options);
+  progress.start();
+  let res;
+  try {
+    res = await fetch(`/api${path}`, options);
+  } finally {
+    progress.done();
+  }
   if (res.status === 401) {
     location.reload();
     return new Promise(() => {});
@@ -147,6 +153,30 @@ function sortedChildren(node) {
   return [...node.children.values()].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
 }
 
+// Material Symbols glyph — the icon font renders the ligature name as the icon.
+function makeIcon(name) {
+  const icon = document.createElement('span');
+  icon.className = 'material-symbols-outlined';
+  icon.textContent = name;
+  return icon;
+}
+
+// Sidebar pill: [icon] label [count]
+function fillFolderButton(btn, iconName, label, count) {
+  btn.textContent = '';
+  btn.appendChild(makeIcon(iconName));
+  const labelEl = document.createElement('span');
+  labelEl.className = 'folder-label';
+  labelEl.textContent = label;
+  btn.appendChild(labelEl);
+  if (count !== undefined) {
+    const countEl = document.createElement('span');
+    countEl.className = 'folder-count';
+    countEl.textContent = count;
+    btn.appendChild(countEl);
+  }
+}
+
 function renderFolders() {
   els.folderList.innerHTML = '';
 
@@ -154,7 +184,7 @@ function renderFolders() {
   const allBtn = document.createElement('button');
   allBtn.type = 'button';
   allBtn.className = 'folder-btn' + (!state.favoritesOnly && state.currentFolder === '' ? ' active' : '');
-  allBtn.textContent = 'All bookmarks';
+  fillFolderButton(allBtn, 'bookmarks', 'All bookmarks');
   allBtn.addEventListener('click', () => selectFolder(''));
   makeDropTarget(allBtn, (id) => moveBookmarkToFolder(id, ''));
   allLi.appendChild(allBtn);
@@ -166,7 +196,7 @@ function renderFolders() {
   favBtn.type = 'button';
   favBtn.id = 'favorites-btn';
   favBtn.className = 'folder-btn' + (state.favoritesOnly ? ' active' : '');
-  favBtn.textContent = '★ Favorites';
+  fillFolderButton(favBtn, 'star', 'Favorites');
   favBtn.addEventListener('click', selectFavorites);
   makeDropTarget(favBtn, addBookmarkToFavorites);
   favLi.appendChild(favBtn);
@@ -192,7 +222,7 @@ function renderFolderNode(node, depth, siblings) {
   const chevron = document.createElement('button');
   chevron.className = 'folder-chevron' + (expanded ? ' open' : '');
   chevron.type = 'button';
-  chevron.textContent = expandable ? '▸' : '';
+  if (expandable) chevron.appendChild(makeIcon('chevron_right'));
   if (!expandable) chevron.disabled = true;
   chevron.title = expandable ? 'Show contents' : '';
   chevron.addEventListener('click', (e) => {
@@ -204,7 +234,7 @@ function renderFolderNode(node, depth, siblings) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'folder-btn' + (!state.favoritesOnly && state.currentFolder === node.path ? ' active' : '');
-  btn.textContent = `${node.name} (${aggregateCount(node)})`;
+  fillFolderButton(btn, 'folder', node.name, aggregateCount(node));
   btn.title = `${node.path} — double-click to rename`;
   btn.addEventListener('click', () => selectFolder(node.path));
   btn.addEventListener('dblclick', (e) => {
@@ -430,6 +460,7 @@ function renderRow(bookmark) {
   tr.appendChild(urlTd);
 
   const folderTd = document.createElement('td');
+  folderTd.className = 'folder-cell';
   folderTd.textContent = bookmark.folder;
   tr.appendChild(folderTd);
 
@@ -475,7 +506,8 @@ function renderCard(bookmark) {
   if (bookmark.folder) {
     const folderBadge = document.createElement('span');
     folderBadge.className = 'folder-badge';
-    folderBadge.textContent = bookmark.folder;
+    folderBadge.appendChild(makeIcon('folder'));
+    folderBadge.appendChild(document.createTextNode(bookmark.folder));
     card.appendChild(folderBadge);
   }
 
@@ -750,7 +782,7 @@ function makeStarButton(bookmark) {
   btn.type = 'button';
   btn.className = 'star-btn' + (bookmark.favorite ? ' active' : '');
   btn.title = bookmark.favorite ? 'Remove from favorites' : 'Add to favorites';
-  btn.textContent = bookmark.favorite ? '★' : '☆';
+  btn.appendChild(makeIcon('star'));
   btn.addEventListener('click', () => toggleFavorite(bookmark));
   return btn;
 }
@@ -758,6 +790,7 @@ function makeStarButton(bookmark) {
 function makeEditButton(bookmark) {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.className = 'secondary';
   btn.textContent = 'Edit';
   btn.addEventListener('click', () => openModal('edit', bookmark));
   return btn;
@@ -1119,9 +1152,7 @@ document.addEventListener('keydown', (e) => {
 
 async function loadAccountBadge() {
   try {
-    const data = await api('/auth/me');
-    const el = document.getElementById('account-username');
-    if (el) el.textContent = data.username;
+    renderAccountBadge(await api('/auth/me'));
   } catch {
     /* ignore */
   }

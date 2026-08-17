@@ -15,7 +15,13 @@ const deleteAccountError = document.getElementById('delete-account-error');
 const deleteAccountCancel = document.getElementById('delete-account-cancel');
 
 async function api(path, options) {
-  const res = await fetch(`/api${path}`, options);
+  progress.start();
+  let res;
+  try {
+    res = await fetch(`/api${path}`, options);
+  } finally {
+    progress.done();
+  }
   if (res.status === 401) {
     location.reload();
     return new Promise(() => {});
@@ -28,7 +34,7 @@ async function api(path, options) {
   return res.json();
 }
 
-themeSelect.value = localStorage.getItem('syncmark:theme') || 'dark';
+themeSelect.value = localStorage.getItem('syncmark:theme') || 'light';
 viewSelect.value = localStorage.getItem('syncmark:view') || 'list';
 
 themeSelect.addEventListener('change', () => {
@@ -62,8 +68,7 @@ async function loadSessionDuration() {
 
 async function loadAccountBadge() {
   try {
-    const data = await api('/auth/me');
-    accountUsernameEl.textContent = data.username;
+    renderAccountBadge(await api('/auth/me'));
   } catch {
     /* ignore */
   }

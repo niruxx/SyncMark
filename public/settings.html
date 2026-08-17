@@ -6,7 +6,8 @@
   <title>Settings — SyncMark</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script src="theme.js"></script>
 </head>
@@ -14,17 +15,33 @@
   <div id="app-shell" hidden>
     <header class="topbar">
       <div class="topbar-left">
-        <h1><a href="index.html">SyncMark</a></h1>
+        <a class="brand" href="index.html">
+          <span class="material-symbols-outlined brand-icon">bookmarks</span>
+          <h1>SyncMark</h1>
+        </a>
         <nav class="nav">
           <a href="index.html">Bookmarks</a>
           <a href="settings.html" class="active">Settings</a>
         </nav>
       </div>
       <div class="topbar-actions">
-        <a href="account.html" class="account-btn" id="account-link">
-          <span class="account-icon">👤</span>
-          <span id="account-username">Account</span>
-        </a>
+        <div class="account-menu">
+          <button type="button" class="account-btn" id="account-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="account-icon material-symbols-outlined">person</span>
+            <span id="account-username">Account</span>
+            <span class="material-symbols-outlined account-caret">expand_more</span>
+          </button>
+          <div class="account-dropdown" id="account-dropdown">
+            <a href="account.html" class="account-dropdown-item">
+              <span class="material-symbols-outlined">manage_accounts</span>
+              Account settings
+            </a>
+            <button type="button" class="account-dropdown-item danger" id="account-sign-out-btn">
+              <span class="material-symbols-outlined">logout</span>
+              Sign out
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -121,6 +138,8 @@
           <p class="settings-hint">SyncMark is a self-hosted bookmark manager. Import bookmark exports from your browser, then browse, search, edit, and remove them here.</p>
           <p class="settings-hint">Keyboard shortcuts (on the Bookmarks page): <code>/</code> to search, <code>n</code> to add a bookmark, <code>Esc</code> to close dialogs.</p>
         </section>
+
+        <p class="settings-signature">- niruxxdaboi -</p>
       </main>
     </div>
 

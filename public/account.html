@@ -6,7 +6,8 @@
   <title>Account — SyncMark</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script src="theme.js"></script>
 </head>
@@ -14,22 +15,54 @@
   <div id="app-shell" hidden>
     <header class="topbar">
       <div class="topbar-left">
-        <h1><a href="index.html">SyncMark</a></h1>
+        <a class="brand" href="index.html">
+          <span class="material-symbols-outlined brand-icon">bookmarks</span>
+          <h1>SyncMark</h1>
+        </a>
         <nav class="nav">
           <a href="index.html">Bookmarks</a>
           <a href="settings.html">Settings</a>
         </nav>
       </div>
       <div class="topbar-actions">
-        <a href="account.html" class="account-btn active" id="account-link">
-          <span class="account-icon">👤</span>
-          <span id="account-username">Account</span>
-        </a>
+        <div class="account-menu">
+          <button type="button" class="account-btn active" id="account-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="account-icon material-symbols-outlined">person</span>
+            <span id="account-username">Account</span>
+            <span class="material-symbols-outlined account-caret">expand_more</span>
+          </button>
+          <div class="account-dropdown" id="account-dropdown">
+            <a href="account.html" class="account-dropdown-item">
+              <span class="material-symbols-outlined">manage_accounts</span>
+              Account settings
+            </a>
+            <button type="button" class="account-dropdown-item danger" id="account-sign-out-btn">
+              <span class="material-symbols-outlined">logout</span>
+              Sign out
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
     <div class="layout">
       <main class="content settings-page">
+        <section class="settings-section">
+          <h2>Profile picture</h2>
+          <p class="settings-hint">Shown next to your name in the top bar. PNG, JPEG, GIF, or WebP — up to 2&nbsp;MB.</p>
+          <div class="avatar-editor">
+            <div class="avatar-preview" id="avatar-preview">
+              <span class="material-symbols-outlined">person</span>
+            </div>
+            <div class="avatar-actions">
+              <label class="button secondary" for="avatar-file">Upload picture</label>
+              <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+              <button type="button" id="avatar-remove-btn" class="secondary" hidden>Remove</button>
+            </div>
+          </div>
+          <p class="modal-error" id="avatar-error" hidden></p>
+        </section>
+
         <section class="settings-section">
           <h2>Change username</h2>
           <form id="username-form" class="account-form">

@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const multer = require('multer');
 const { statements, wipeDatabase } = require('../db');
 const { hashPassword, verifyPassword } = require('../utils/password');
 const { parseCookies } = require('../utils/cookies');
@@ -15,6 +16,20 @@ const SESSION_DURATIONS_MS = {
 };
 const DEFAULT_SESSION_DURATION = 'hourly';
 const PERMANENT_COOKIE_MAX_AGE = 10 * 365 * 24 * 60 * 60; // ~10 years, in seconds
+
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const AVATAR_MIME_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: AVATAR_MAX_BYTES },
+  fileFilter: (req, file, cb) => {
+    if (!AVATAR_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Picture must be a PNG, JPEG, GIF, or WebP image'));
+    }
+    cb(null, true);
+  },
+});
 
 function currentSessionDuration() {
   const row = statements.getSetting.get('session_duration');
@@ -105,7 +120,48 @@ router.put('/auth/settings', requireAuth, (req, res) => {
 router.get('/auth/me', requireAuth, (req, res) => {
   const user = statements.getUserById.get(req.session.user_id);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  res.json({ username: user.username });
+  res.json({ username: user.username, hasAvatar: Boolean(user.has_avatar) });
+});
+
+router.get('/auth/avatar', requireAuth, (req, res) => {
+  const row = statements.getAvatar.get(req.session.user_id);
+  if (!row || !row.avatar) return res.status(404).json({ error: 'No profile picture set' });
+
+  // Only ever echo back a mime type from our own allow-list, and forbid sniffing,
+  // so a stored file can't be coaxed into executing as something else.
+  const mime = AVATAR_MIME_TYPES.includes(row.avatar_mime) ? row.avatar_mime : 'application/octet-stream';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.setHeader('Cache-Control', 'private, no-cache');
+  res.send(row.avatar);
+});
+
+router.post('/auth/avatar', requireAuth, (req, res) => {
+  avatarUpload.single('avatar')(req, res, (err) => {
+    if (err) {
+      const tooBig = err.code === 'LIMIT_FILE_SIZE';
+      return res.status(400).json({
+        error: tooBig ? 'Picture must be 2 MB or smaller' : err.message || 'Upload failed',
+      });
+    }
+    if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+    if (!AVATAR_MIME_TYPES.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: 'Picture must be a PNG, JPEG, GIF, or WebP image' });
+    }
+
+    statements.setAvatar.run({
+      id: req.session.user_id,
+      avatar: req.file.buffer,
+      mime: req.file.mimetype,
+    });
+    res.status(201).json({ ok: true });
+  });
+});
+
+router.delete('/auth/avatar', requireAuth, (req, res) => {
+  statements.clearAvatar.run({ id: req.session.user_id });
+  res.status(204).end();
 });
 
 router.put('/auth/account', requireAuth, (req, res) => {
