@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SyncMark Extension Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>SyncMark extension settings</h1>
+    <p class="hint">Point this extension at your SyncMark server — the same address you use to open it in a browser tab.</p>
+
+    <form id="options-form">
+      <label>
+        Server URL
+        <input type="url" id="server-url-input" placeholder="http://localhost:3000" required />
+      </label>
+      <button type="submit" id="save-btn">Save</button>
+      <span id="save-status"></span>
+    </form>
+
+    <p class="hint">
+      This extension talks directly to your SyncMark server's API using your existing sign-in — nothing is sent anywhere else.
+      If your server isn't reachable at <code>localhost</code>, make sure the address above (including port) matches exactly.
+    </p>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

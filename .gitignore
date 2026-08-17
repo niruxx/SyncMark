@@ -1,0 +1,4 @@
+node_modules/
+data/*.sqlite3
+data/*.sqlite3-journal
+npm-debug.log*

@@ -1,0 +1,22 @@
+{
+  "name": "syncmark",
+  "version": "1.0.0",
+  "description": "Self-hosted bookmark manager server: import browser bookmark exports (HTML/JSON) and browse, edit, and remove them from the web.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "cheerio": "^1.0.0",
+    "express": "^4.19.2",
+    "multer": "^2.0.0"
+  },
+  "license": "MIT",
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true
+  }
+}

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SyncMark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div id="app-shell" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1><a href="index.html">SyncMark</a></h1>
+        <nav class="nav">
+          <a href="index.html" class="active">Bookmarks</a>
+          <a href="settings.html">Settings</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <button id="add-bookmark-btn" class="button">+ Add bookmark</button>
+        <a href="account.html" class="account-btn" id="account-link">
+          <span class="account-icon">👤</span>
+          <span id="account-username">Account</span>
+        </a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>Folders</h2>
+          <button id="manage-folders-btn" class="icon-btn" title="Manage folders">⚙</button>
+        </div>
+        <ul id="folder-list">
+          <li><button class="folder-btn active" data-folder="">All bookmarks</button></li>
+          <li class="favorites-entry"><button class="folder-btn" id="favorites-btn">★ Favorites</button></li>
+        </ul>
+      </aside>
+
+      <main class="content">
+        <div class="toolbar">
+          <input type="search" id="search-input" placeholder="Search title or URL…" />
+          <select class="sort-select" id="sort-select" title="Sort">
+            <option value="title-asc">Title A–Z</option>
+            <option value="title-desc">Title Z–A</option>
+            <option value="created-desc">Newest first</option>
+            <option value="created-asc">Oldest first</option>
+            <option value="custom">Custom order (drag to reorder)</option>
+          </select>
+          <div class="view-toggle" role="group" aria-label="View mode">
+            <button class="view-btn" id="view-list-btn" data-view="list" title="List view">☰</button>
+            <button class="view-btn" id="view-grid-btn" data-view="grid" title="Grid view">▦</button>
+          </div>
+          <span id="result-count"></span>
+        </div>
+
+        <table class="bookmark-table" id="list-view">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Title</th>
+              <th>URL</th>
+              <th>Folder</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="bookmark-rows"></tbody>
+        </table>
+
+        <div class="bookmark-grid" id="grid-view" hidden></div>
+
+        <p id="empty-state" class="empty-state" hidden>No bookmarks yet — add one manually, or import an HTML/JSON export from Settings.</p>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="bookmark-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-heading">
+        <h2 id="modal-heading">Add bookmark</h2>
+        <form id="bookmark-form">
+          <label>
+            Title
+            <input type="text" id="modal-title-input" required />
+          </label>
+          <label>
+            URL
+            <input type="url" id="modal-url-input" required placeholder="https://example.com" />
+          </label>
+          <label>
+            Folder
+            <input type="text" id="modal-folder-input" list="folder-datalist" placeholder="e.g. Work/Projects" />
+            <datalist id="folder-datalist"></datalist>
+          </label>
+          <label class="modal-checkbox">
+            <input type="checkbox" id="modal-favorite-input" />
+            Mark as favorite
+          </label>
+          <p class="modal-error" id="modal-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="modal-cancel-btn" class="secondary">Cancel</button>
+            <button type="submit" id="modal-save-btn">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="folders-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="folders-modal-heading">
+        <h2 id="folders-modal-heading">Manage folders</h2>
+        <form id="new-folder-form" class="inline-form">
+          <input type="text" id="new-folder-input" placeholder="New folder name (e.g. Work/Projects)" />
+          <button type="submit">Add</button>
+        </form>
+        <ul id="folders-manage-list" class="folders-manage-list"></ul>
+        <div class="modal-actions">
+          <button type="button" id="folders-modal-close-btn" class="secondary">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="auth.js" data-next="app.js"></script>
+</body>
+</html>

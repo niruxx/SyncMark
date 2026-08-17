@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account — SyncMark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div id="app-shell" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1><a href="index.html">SyncMark</a></h1>
+        <nav class="nav">
+          <a href="index.html">Bookmarks</a>
+          <a href="settings.html">Settings</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <a href="account.html" class="account-btn active" id="account-link">
+          <span class="account-icon">👤</span>
+          <span id="account-username">Account</span>
+        </a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main class="content settings-page">
+        <section class="settings-section">
+          <h2>Change username</h2>
+          <form id="username-form" class="account-form">
+            <label>
+              New username
+              <input type="text" id="new-username-input" required autocomplete="username" />
+            </label>
+            <label>
+              Current password
+              <input type="password" id="username-current-password" required autocomplete="current-password" />
+            </label>
+            <p class="modal-error" id="username-error" hidden></p>
+            <button type="submit" class="button">Save username</button>
+          </form>
+        </section>
+
+        <section class="settings-section">
+          <h2>Change password</h2>
+          <form id="password-form" class="account-form">
+            <label>
+              Current password
+              <input type="password" id="password-current-input" required autocomplete="current-password" />
+            </label>
+            <label>
+              New password
+              <input type="password" id="password-new-input" required minlength="8" autocomplete="new-password" />
+            </label>
+            <label>
+              Confirm new password
+              <input type="password" id="password-confirm-input" required autocomplete="new-password" />
+            </label>
+            <p class="modal-error" id="password-error" hidden></p>
+            <button type="submit" class="button">Save password</button>
+          </form>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="auth.js" data-next="account.js"></script>
+</body>
+</html>

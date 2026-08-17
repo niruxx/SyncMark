@@ -1,0 +1,331 @@
+:root {
+  --bg: #0d0f14;
+  --panel: #161922;
+  --panel-2: #1d212c;
+  --border: #2a2f3b;
+  --text: #e9ebf0;
+  --muted: #99a1b3;
+  --accent: #5b8cff;
+  --danger: #ff5c6c;
+  --success: #3ecf8e;
+  --focus-ring: rgba(91, 140, 255, 0.28);
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-pill: 999px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 360px;
+  max-height: 520px;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.topbar h1 {
+  font-size: 1.02rem;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--accent);
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 50%;
+}
+
+.icon-btn:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.view {
+  padding: 1rem;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 0.9rem;
+  text-align: center;
+  line-height: 1.4;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  transition: transform 0.1s var(--ease), filter 0.12s var(--ease), background-color 0.15s var(--ease);
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button:active {
+  transform: scale(0.97);
+  filter: brightness(0.95);
+}
+
+.primary-btn {
+  width: 100%;
+  background: var(--accent);
+  color: white;
+  padding: 0.6rem 0.7rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+  filter: none;
+}
+
+.secondary-btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.7rem;
+}
+
+.secondary-btn:hover {
+  background: var(--border);
+  filter: none;
+}
+
+.danger-btn {
+  background: var(--danger);
+  color: white;
+}
+
+.link-btn {
+  background: none;
+  color: var(--accent);
+  padding: 0.3rem 0;
+  font-size: 0.8rem;
+  border-radius: 6px;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+  filter: none;
+}
+
+#lock-form,
+#bookmark-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+#lock-form input[type="text"],
+#lock-form input[type="password"],
+#bookmark-form input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  width: 100%;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+#lock-form input:focus,
+#bookmark-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+#bookmark-form label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+#bookmark-form label.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+}
+
+#bookmark-form label.checkbox input {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.form-actions button {
+  flex: 1;
+  padding: 0.55rem 0.7rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+#search-input {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-pill);
+  padding: 0.4rem 0.7rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+
+#search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#folder-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-pill);
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  max-width: 110px;
+}
+
+#bookmark-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.4rem;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.12s var(--ease);
+}
+
+.bookmark-item:hover {
+  background: var(--panel-2);
+}
+
+.bookmark-item .favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.bookmark-item .bookmark-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.bookmark-item .bookmark-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.83rem;
+}
+
+.bookmark-item .bookmark-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.bookmark-item .item-actions {
+  display: flex;
+  gap: 0.1rem;
+  flex-shrink: 0;
+}
+
+.bookmark-item .item-actions button {
+  background: none;
+  color: var(--muted);
+  padding: 0.25rem 0.4rem;
+  font-size: 0.85rem;
+  border-radius: 50%;
+}
+
+.bookmark-item .item-actions button:hover {
+  color: var(--text);
+  background: var(--border);
+  filter: none;
+}
+
+.bookmark-item .star-btn.active {
+  color: #d99a1a;
+}
+
+.footer-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}

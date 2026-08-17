@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "SyncMark",
+  "version": "1.0.0",
+  "description": "Browse, search, and manage your self-hosted SyncMark bookmarks from the Chrome toolbar.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SyncMark"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["http://*/*", "https://*/*"]
+}

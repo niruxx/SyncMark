@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — SyncMark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div id="app-shell" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1><a href="index.html">SyncMark</a></h1>
+        <nav class="nav">
+          <a href="index.html">Bookmarks</a>
+          <a href="settings.html" class="active">Settings</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <a href="account.html" class="account-btn" id="account-link">
+          <span class="account-icon">👤</span>
+          <span id="account-username">Account</span>
+        </a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main class="content settings-page">
+        <section class="settings-section">
+          <h2>Appearance</h2>
+          <div class="settings-row">
+            <label for="theme-select">Theme</label>
+            <select id="theme-select">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="default-view-select">Default view</label>
+            <select id="default-view-select">
+              <option value="list">List</option>
+              <option value="grid">Grid</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Session</h2>
+          <div class="settings-row">
+            <label for="session-duration-select">Stay signed in for</label>
+            <select id="session-duration-select">
+              <option value="5m">5 minutes</option>
+              <option value="hourly">1 hour</option>
+              <option value="monthly">30 days</option>
+              <option value="permanent">Permanently (never ask again)</option>
+            </select>
+          </div>
+          <p class="settings-hint">Applies the next time you sign in.</p>
+          <div class="settings-row">
+            <div>
+              <p class="settings-hint">Lock SyncMark now — you'll need your username and password to get back in.</p>
+            </div>
+            <button id="sign-out-btn" class="secondary">Sign out</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Import</h2>
+          <p class="settings-hint">Import bookmarks from a browser export — a Netscape-format HTML file, or a JSON export (Chrome's <code>Bookmarks</code> file, Firefox's JSON backup, or a plain <code>{title, url}[]</code> array). Folder structure is preserved.</p>
+          <div class="settings-row">
+            <label class="button secondary" for="import-file">Choose file to import</label>
+            <input type="file" id="import-file" accept=".html,.htm,.json" hidden />
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Library</h2>
+          <div class="settings-stats">
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-total">–</span>
+              <span class="stat-label">Bookmarks</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-folders">–</span>
+              <span class="stat-label">Folders</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Export</h2>
+          <p class="settings-hint">Download every bookmark as a browser-importable HTML file, or as JSON for backup/portability.</p>
+          <div class="export-actions">
+            <a class="button secondary" href="/api/export?format=html" download>Export HTML</a>
+            <a class="button secondary" href="/api/export?format=json" download>Export JSON</a>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Danger zone</h2>
+          <div class="settings-row">
+            <div>
+              <p class="settings-hint">Permanently remove every bookmark from this SyncMark instance. This cannot be undone.</p>
+            </div>
+            <button id="clear-all-btn" class="danger">Clear all bookmarks</button>
+          </div>
+          <div class="settings-row">
+            <div>
+              <p class="settings-hint">Delete your account and everything in it — all bookmarks, folders, and settings. You'll be returned to the initial setup screen. This cannot be undone.</p>
+            </div>
+            <button id="delete-account-btn" class="danger">Delete account</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>About</h2>
+          <p class="settings-hint">SyncMark is a self-hosted bookmark manager. Import bookmark exports from your browser, then browse, search, edit, and remove them here.</p>
+          <p class="settings-hint">Keyboard shortcuts (on the Bookmarks page): <code>/</code> to search, <code>n</code> to add a bookmark, <code>Esc</code> to close dialogs.</p>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="delete-account-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-account-heading">
+        <h2 id="delete-account-heading">Delete account</h2>
+        <p class="settings-hint">This permanently deletes your account and all bookmarks, folders, and settings. There is no undo. Enter your password to confirm.</p>
+        <form id="delete-account-form">
+          <label>
+            Password
+            <input type="password" id="delete-account-password" required autocomplete="current-password" />
+          </label>
+          <p class="modal-error" id="delete-account-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="delete-account-cancel" class="secondary">Cancel</button>
+            <button type="submit" id="delete-account-confirm" class="danger">Delete everything</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="auth.js" data-next="settings.js"></script>
+</body>
+</html>
