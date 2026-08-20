@@ -12,5 +12,15 @@
     "open_in_tab": true
   },
   "permissions": ["storage", "activeTab"],
-  "host_permissions": ["http://*/*", "https://*/*"]
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["bar.js"],
+      "run_at": "document_end"
+    }
+  ]
 }

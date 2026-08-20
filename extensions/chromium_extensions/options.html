@@ -26,6 +26,24 @@
       This extension talks directly to your SyncMark server's API using your existing sign-in — nothing is sent anywhere else.
       If your server isn't reachable at <code>localhost</code>, make sure the address above (including port) matches exactly.
     </p>
+
+    <h2>Bookmarks bar</h2>
+    <p class="hint">
+      Pin one folder to a slim bar SyncMark adds under the address bar on every page — a self-hosted stand-in for the
+      browser's native bookmarks bar. Already-open tabs pick up changes automatically.
+    </p>
+
+    <label class="checkbox-label">
+      <input type="checkbox" id="bar-enabled-input" />
+      Show the bookmarks bar
+    </label>
+    <label>
+      Folder to pin
+      <select id="bar-folder-select" disabled>
+        <option value="">— set a server URL above first —</option>
+      </select>
+    </label>
+    <span id="bar-status" class="hint"></span>
   </div>
   <script src="options.js"></script>
 </body>

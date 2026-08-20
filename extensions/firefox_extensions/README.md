@@ -13,6 +13,7 @@ HTTP, using your existing SyncMark sign-in.
 - Search and filter by folder
 - Add, edit, delete, and favorite/unfavorite bookmarks
 - Click a bookmark to open it in a new tab
+- **Bookmarks bar**: pin one folder to a slim bar injected under the address bar on every page — a self-hosted stand-in for the browser's native bookmarks bar. Off by default; turn it on and pick a folder from the extension's options page (⚙ in the popup). Left-click opens in the current tab, Ctrl/Cmd-click or middle-click opens in a new tab (same as a native bookmark), and the ✕ on the right hides it for that page only. It won't show up on your SyncMark server's own pages
 
 Not included (by design, to keep the popup focused — use the web app for these): grid view,
 drag-and-drop reordering, folder create/rename/delete, import/export, theme switching, and
@@ -44,3 +45,10 @@ to [addons.mozilla.org](https://addons.mozilla.org) for signing.
 - Sessions are the same cookie-based sessions the web app uses — signing in here doesn't create
   a separate account, and the session-length you configured in the web app's Settings page
   still applies.
+- The bookmarks bar only shows bookmarks filed directly in the pinned folder (not subfolders),
+  matching how a real bookmarks-bar folder behaves. It reflows the page down by its own height
+  (`margin-top` on `<html>`), which can visually clash with sites that pin their own header to
+  the very top of the viewport — the ✕ button hides it per-page if that happens.
+- Toggling the bar or switching the pinned folder in options refreshes every open tab
+  automatically; the extension polls your server for that folder's bookmarks at most once
+  every 30 seconds per tab, so edits made elsewhere can take a moment to show up.

@@ -21,6 +21,16 @@
   },
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["bar.js"],
+      "run_at": "document_end"
+    }
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "syncmark@selfhosted.extension",
