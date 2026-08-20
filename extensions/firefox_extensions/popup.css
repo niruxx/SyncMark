@@ -55,6 +55,19 @@ body {
   color: var(--accent);
 }
 
+.provider-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 0.1rem 0.5rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  letter-spacing: 0;
+}
+
 .icon-btn {
   background: none;
   border: none;

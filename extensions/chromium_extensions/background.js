@@ -1,48 +1,52 @@
+importScripts('providers.js');
+
 const BAR_CACHE_TTL_MS = 30 * 1000;
 
-async function fetchFolderBookmarks(base, folder) {
-  const res = await fetch(`${base}/api/bookmarks?folder=${encodeURIComponent(folder)}&exact=1&sort=custom`, {
-    credentials: 'include',
-  });
-  if (res.status === 401) return { unauthenticated: true };
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-  return { bookmarks: await res.json() };
+async function getActiveContext() {
+  const raw = await chrome.storage.local.get(SyncMarkProviders.STORAGE_KEYS);
+  const providerId = raw.provider || 'syncmark';
+  const provider = SyncMarkProviders.get(providerId);
+  const config = SyncMarkProviders.readConfig(providerId, raw);
+  return {
+    providerId,
+    provider,
+    config,
+    pinnedFolder: raw.pinnedFolder || '',
+    barEnabled: Boolean(raw.barEnabled),
+    barCache: raw.barCache,
+  };
 }
 
 async function getBarData() {
-  const { serverUrl, pinnedFolder, barEnabled, barCache } = await chrome.storage.local.get([
-    'serverUrl',
-    'pinnedFolder',
-    'barEnabled',
-    'barCache',
-  ]);
+  const { providerId, provider, config, pinnedFolder, barEnabled, barCache } = await getActiveContext();
 
-  if (!barEnabled || !serverUrl || !pinnedFolder) {
+  if (!barEnabled || !provider.configured(config) || !pinnedFolder) {
     return { enabled: false };
   }
 
-  const base = serverUrl.replace(/\/+$/, '');
   const now = Date.now();
+  const cacheMatches =
+    barCache && barCache.provider === providerId && barCache.folder === pinnedFolder && barCache.base === config.serverUrl;
 
-  if (barCache && barCache.folder === pinnedFolder && barCache.base === base && now - barCache.time < BAR_CACHE_TTL_MS) {
-    return { enabled: true, serverUrl: base, bookmarks: barCache.bookmarks };
+  if (cacheMatches && now - barCache.time < BAR_CACHE_TTL_MS) {
+    return { enabled: true, bookmarks: barCache.bookmarks };
   }
 
   try {
-    const result = await fetchFolderBookmarks(base, pinnedFolder);
-    if (result.unauthenticated) {
-      return { enabled: true, serverUrl: base, unauthenticated: true };
-    }
+    const bookmarks = await provider.listBookmarks(config, { folderId: pinnedFolder });
     await chrome.storage.local.set({
-      barCache: { folder: pinnedFolder, base, time: now, bookmarks: result.bookmarks },
+      barCache: { provider: providerId, folder: pinnedFolder, base: config.serverUrl, time: now, bookmarks },
     });
-    return { enabled: true, serverUrl: base, bookmarks: result.bookmarks };
-  } catch {
-    // Server unreachable right now — fall back to the last-known list for this folder rather than an empty bar.
-    if (barCache && barCache.folder === pinnedFolder && barCache.base === base) {
-      return { enabled: true, serverUrl: base, bookmarks: barCache.bookmarks };
+    return { enabled: true, bookmarks };
+  } catch (err) {
+    if (err && err.status === 401) {
+      return { enabled: true, unauthenticated: true };
     }
-    return { enabled: true, serverUrl: base, bookmarks: [] };
+    // Server unreachable right now — fall back to the last-known list rather than an empty bar.
+    if (cacheMatches) {
+      return { enabled: true, bookmarks: barCache.bookmarks };
+    }
+    return { enabled: true, bookmarks: [] };
   }
 }
 
@@ -69,7 +73,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.pinnedFolder || changes.barEnabled || changes.serverUrl) {
+  const relevant = SyncMarkProviders.STORAGE_KEYS.filter((k) => k !== 'barCache');
+  if (relevant.some((key) => key in changes)) {
     chrome.storage.local.remove('barCache');
     broadcastRefresh();
   }

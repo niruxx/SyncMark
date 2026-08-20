@@ -17,7 +17,10 @@
   }
 
   async function isOwnServerPage() {
-    const { serverUrl } = await browser.storage.local.get('serverUrl');
+    const raw = await browser.storage.local.get(['provider', 'serverUrl', 'linkwardenUrl', 'karakeepUrl']);
+    const serverUrl = { syncmark: raw.serverUrl, linkwarden: raw.linkwardenUrl, karakeep: raw.karakeepUrl }[
+      raw.provider || 'syncmark'
+    ];
     if (!serverUrl) return false;
     try {
       return location.origin === new URL(serverUrl).origin;

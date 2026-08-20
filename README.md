@@ -229,7 +229,7 @@ Then open SyncMark, go to **Settings → Import**, and choose the `.html` or `.j
 
 ## Browser extensions
 
-Two toolbar extensions live under `extensions/` — a quick popup to search, browse, and add bookmarks without opening a SyncMark tab. Both talk to your running SyncMark server over its normal API; neither ships any bundled server address, so you point it at your instance's URL on first use.
+Two toolbar extensions live under `extensions/` — a quick popup to search, browse, and add bookmarks without opening a SyncMark tab, plus an optional bookmarks bar pinned under the address bar. Both default to talking to your running SyncMark server over its normal API, but can instead be pointed at a self-hosted [Linkwarden](https://linkwarden.app/) or [Karakeep](https://karakeep.app/) instance (over HTTP or HTTPS) — pick a service in the extension's options page. Neither extension ships any bundled server address, so you point it at your instance's URL on first use.
 
 - **Firefox**: `extensions/firefox_extensions/` — load via `about:debugging` → *Load Temporary Add-on…* (see its own README for details)
 - **Chrome / Edge / other Chromium browsers**: `extensions/chromium_extensions/` — load via `chrome://extensions` → *Load unpacked* (see its own README for details)

@@ -11,26 +11,98 @@
 <body>
   <div class="wrap">
     <h1>SyncMark extension settings</h1>
-    <p class="hint">Point this extension at your SyncMark server — the same address you use to open it in a browser tab.</p>
+    <p class="hint">Choose which self-hosted bookmark service this extension talks to.</p>
 
-    <form id="options-form">
-      <label>
-        Server URL
-        <input type="url" id="server-url-input" placeholder="http://localhost:3000" required />
-      </label>
-      <button type="submit" id="save-btn">Save</button>
-      <span id="save-status"></span>
-    </form>
+    <label>
+      Bookmark service
+      <select id="provider-select">
+        <option value="syncmark">SyncMark</option>
+        <option value="linkwarden">Linkwarden</option>
+        <option value="karakeep">Karakeep</option>
+      </select>
+    </label>
 
-    <p class="hint">
-      This extension talks directly to your SyncMark server's API using your existing sign-in — nothing is sent anywhere else.
-      If your server isn't reachable at <code>localhost</code>, make sure the address above (including port) matches exactly.
-    </p>
+    <div id="panel-syncmark" class="provider-panel">
+      <p class="hint">
+        Point this extension at your SyncMark server — the same address you use to open it in a browser tab. Sign in
+        (or run first-time setup) from the toolbar popup, not here.
+      </p>
+      <form id="syncmark-form">
+        <label>
+          Server URL
+          <input type="url" id="syncmark-url-input" placeholder="http://localhost:3000" />
+        </label>
+        <button type="submit">Save</button>
+        <span class="save-status" id="syncmark-status"></span>
+      </form>
+    </div>
+
+    <div id="panel-linkwarden" class="provider-panel" hidden>
+      <p class="hint">
+        Connect to a self-hosted Linkwarden instance over HTTP or HTTPS — a LAN address like
+        <code>http://192.168.1.10:3000</code> works too. Sign in with your account, or paste a pre-generated Access
+        Token from Linkwarden's <em>Settings → Access Tokens</em> (recommended — it avoids storing your password).
+      </p>
+      <form id="linkwarden-form">
+        <label>
+          Server URL
+          <input type="url" id="linkwarden-url-input" placeholder="http://192.168.1.10:3000" />
+        </label>
+        <label>
+          Sign in with
+          <select id="linkwarden-auth-mode">
+            <option value="password">Username &amp; password</option>
+            <option value="token">Access token</option>
+          </select>
+        </label>
+        <div id="linkwarden-password-fields">
+          <label>
+            Username
+            <input type="text" id="linkwarden-username-input" autocomplete="username" />
+          </label>
+          <label>
+            Password
+            <input type="password" id="linkwarden-password-input" autocomplete="current-password" />
+          </label>
+        </div>
+        <div id="linkwarden-token-fields" hidden>
+          <label>
+            Access token
+            <input type="password" id="linkwarden-token-input" placeholder="Paste an Access Token" autocomplete="off" />
+          </label>
+        </div>
+        <button type="submit">Save &amp; connect</button>
+        <span class="save-status" id="linkwarden-status"></span>
+        <p class="hint" id="linkwarden-connection-hint"></p>
+      </form>
+    </div>
+
+    <div id="panel-karakeep" class="provider-panel" hidden>
+      <p class="hint">
+        Connect to a self-hosted Karakeep instance over HTTP or HTTPS — a LAN address like
+        <code>http://192.168.1.10:3000</code> works too. Karakeep's API only supports API keys (no
+        username/password) — generate one from <em>Settings → API Keys</em>.
+      </p>
+      <form id="karakeep-form">
+        <label>
+          Server URL
+          <input type="url" id="karakeep-url-input" placeholder="http://192.168.1.10:3000" />
+        </label>
+        <label>
+          API key
+          <input type="password" id="karakeep-token-input" placeholder="Paste an API key" autocomplete="off" />
+        </label>
+        <button type="submit">Save &amp; connect</button>
+        <span class="save-status" id="karakeep-status"></span>
+        <p class="hint" id="karakeep-connection-hint"></p>
+      </form>
+    </div>
 
     <h2>Bookmarks bar</h2>
     <p class="hint">
-      Pin one folder to a slim bar SyncMark adds under the address bar on every page — a self-hosted stand-in for the
-      browser's native bookmarks bar. Already-open tabs pick up changes automatically.
+      Pin one folder/collection/list to a slim bar SyncMark adds under the address bar on every page — a self-hosted
+      stand-in for the browser's native bookmarks bar, synced from whichever service is connected above. Already-open
+      tabs pick up changes automatically.
     </p>
 
     <label class="checkbox-label">
@@ -40,11 +112,12 @@
     <label>
       Folder to pin
       <select id="bar-folder-select" disabled>
-        <option value="">— set a server URL above first —</option>
+        <option value="">— connect a service above first —</option>
       </select>
     </label>
     <span id="bar-status" class="hint"></span>
   </div>
+  <script src="providers.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

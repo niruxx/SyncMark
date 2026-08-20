@@ -1,84 +1,249 @@
-const form = document.getElementById('options-form');
-const input = document.getElementById('server-url-input');
-const status = document.getElementById('save-status');
+const els = {
+  providerSelect: document.getElementById('provider-select'),
+  panels: {
+    syncmark: document.getElementById('panel-syncmark'),
+    linkwarden: document.getElementById('panel-linkwarden'),
+    karakeep: document.getElementById('panel-karakeep'),
+  },
 
-const barEnabledInput = document.getElementById('bar-enabled-input');
-const barFolderSelect = document.getElementById('bar-folder-select');
-const barStatus = document.getElementById('bar-status');
+  syncmarkForm: document.getElementById('syncmark-form'),
+  syncmarkUrl: document.getElementById('syncmark-url-input'),
+  syncmarkStatus: document.getElementById('syncmark-status'),
 
-async function load() {
-  const { serverUrl } = await chrome.storage.local.get('serverUrl');
-  input.value = serverUrl || 'http://localhost:3000';
+  linkwardenForm: document.getElementById('linkwarden-form'),
+  linkwardenUrl: document.getElementById('linkwarden-url-input'),
+  linkwardenAuthMode: document.getElementById('linkwarden-auth-mode'),
+  linkwardenPasswordFields: document.getElementById('linkwarden-password-fields'),
+  linkwardenTokenFields: document.getElementById('linkwarden-token-fields'),
+  linkwardenUsername: document.getElementById('linkwarden-username-input'),
+  linkwardenPassword: document.getElementById('linkwarden-password-input'),
+  linkwardenToken: document.getElementById('linkwarden-token-input'),
+  linkwardenStatus: document.getElementById('linkwarden-status'),
+  linkwardenHint: document.getElementById('linkwarden-connection-hint'),
+
+  karakeepForm: document.getElementById('karakeep-form'),
+  karakeepUrl: document.getElementById('karakeep-url-input'),
+  karakeepToken: document.getElementById('karakeep-token-input'),
+  karakeepStatus: document.getElementById('karakeep-status'),
+  karakeepHint: document.getElementById('karakeep-connection-hint'),
+
+  barEnabled: document.getElementById('bar-enabled-input'),
+  barFolder: document.getElementById('bar-folder-select'),
+  barStatus: document.getElementById('bar-status'),
+};
+
+function showStatus(el, text) {
+  el.textContent = text;
+  setTimeout(() => {
+    if (el.textContent === text) el.textContent = '';
+  }, 3000);
 }
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const url = input.value.trim().replace(/\/+$/, '');
+function showProviderPanel(id) {
+  for (const [key, panel] of Object.entries(els.panels)) {
+    panel.hidden = key !== id;
+  }
+}
 
-  if (!/^https?:\/\/.+/i.test(url)) {
-    status.textContent = 'URL must start with http:// or https://';
+function requireHttpUrl(url) {
+  return /^https?:\/\/.+/i.test(url);
+}
+
+// --- Load current settings into the form ---
+
+async function loadProviderFields() {
+  const raw = await chrome.storage.local.get(SyncMarkProviders.STORAGE_KEYS);
+  const providerId = raw.provider || 'syncmark';
+  els.providerSelect.value = providerId;
+  showProviderPanel(providerId);
+
+  els.syncmarkUrl.value = raw.serverUrl || 'http://localhost:3000';
+
+  els.linkwardenUrl.value = raw.linkwardenUrl || '';
+  const lwAuthMode = raw.linkwardenAuthMode || 'password';
+  els.linkwardenAuthMode.value = lwAuthMode;
+  els.linkwardenTokenFields.hidden = lwAuthMode !== 'token';
+  els.linkwardenPasswordFields.hidden = lwAuthMode === 'token';
+  els.linkwardenUsername.value = raw.linkwardenUsername || '';
+  els.linkwardenHint.textContent = raw.linkwardenToken
+    ? 'Connected. Leave the password/token blank and save to keep the current connection.'
+    : '';
+
+  els.karakeepUrl.value = raw.karakeepUrl || '';
+  els.karakeepHint.textContent = raw.karakeepToken
+    ? 'Connected. Leave the API key blank and save to keep the current connection.'
+    : '';
+}
+
+els.providerSelect.addEventListener('change', async () => {
+  showProviderPanel(els.providerSelect.value);
+  await chrome.storage.local.set({ provider: els.providerSelect.value });
+  await loadBarSettings();
+});
+
+els.linkwardenAuthMode.addEventListener('change', () => {
+  const isToken = els.linkwardenAuthMode.value === 'token';
+  els.linkwardenTokenFields.hidden = !isToken;
+  els.linkwardenPasswordFields.hidden = isToken;
+});
+
+// --- SyncMark ---
+
+els.syncmarkForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = els.syncmarkUrl.value.trim().replace(/\/+$/, '');
+  if (!requireHttpUrl(url)) {
+    showStatus(els.syncmarkStatus, 'URL must start with http:// or https://');
+    return;
+  }
+  await chrome.storage.local.set({ serverUrl: url });
+  showStatus(els.syncmarkStatus, 'Saved.');
+  await loadBarSettings();
+});
+
+// --- Linkwarden ---
+
+els.linkwardenForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = els.linkwardenUrl.value.trim().replace(/\/+$/, '');
+  if (!requireHttpUrl(url)) {
+    showStatus(els.linkwardenStatus, 'URL must start with http:// or https://');
     return;
   }
 
-  await chrome.storage.local.set({ serverUrl: url });
-  status.textContent = 'Saved.';
-  setTimeout(() => {
-    status.textContent = '';
-  }, 2000);
+  const provider = SyncMarkProviders.get('linkwarden');
+  const authMode = els.linkwardenAuthMode.value;
+  const { linkwardenToken: existingToken } = await chrome.storage.local.get('linkwardenToken');
 
+  try {
+    if (authMode === 'token') {
+      const token = els.linkwardenToken.value.trim();
+      if (!token && !existingToken) {
+        showStatus(els.linkwardenStatus, 'Paste an access token first.');
+        return;
+      }
+      const finalToken = token || existingToken;
+      if (token) {
+        const auth = await provider.testAuth({ serverUrl: url, token: finalToken });
+        if (!auth.authenticated) {
+          showStatus(els.linkwardenStatus, 'That token was rejected — check it and try again.');
+          return;
+        }
+      }
+      await chrome.storage.local.set({
+        linkwardenUrl: url,
+        linkwardenAuthMode: 'token',
+        linkwardenToken: finalToken,
+      });
+    } else {
+      const username = els.linkwardenUsername.value.trim();
+      const password = els.linkwardenPassword.value;
+      if (!password) {
+        if (!existingToken) {
+          showStatus(els.linkwardenStatus, 'Enter your username and password.');
+          return;
+        }
+        // No new password entered — just update the URL/username, keep the existing session token.
+        await chrome.storage.local.set({ linkwardenUrl: url, linkwardenAuthMode: 'password', linkwardenUsername: username });
+      } else {
+        const { token } = await provider.login({ serverUrl: url }, { username, password });
+        await chrome.storage.local.set({
+          linkwardenUrl: url,
+          linkwardenAuthMode: 'password',
+          linkwardenUsername: username,
+          linkwardenToken: token,
+        });
+        els.linkwardenPassword.value = '';
+      }
+    }
+    showStatus(els.linkwardenStatus, 'Connected.');
+  } catch (err) {
+    showStatus(els.linkwardenStatus, err.message || 'Could not connect.');
+  }
+  await loadProviderFields();
+  await loadBarSettings();
+});
+
+// --- Karakeep ---
+
+els.karakeepForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = els.karakeepUrl.value.trim().replace(/\/+$/, '');
+  if (!requireHttpUrl(url)) {
+    showStatus(els.karakeepStatus, 'URL must start with http:// or https://');
+    return;
+  }
+
+  const provider = SyncMarkProviders.get('karakeep');
+  const { karakeepToken: existingToken } = await chrome.storage.local.get('karakeepToken');
+  const token = els.karakeepToken.value.trim();
+
+  if (!token && !existingToken) {
+    showStatus(els.karakeepStatus, 'Paste an API key first.');
+    return;
+  }
+  const finalToken = token || existingToken;
+
+  try {
+    if (token) {
+      const auth = await provider.testAuth({ serverUrl: url, token: finalToken });
+      if (!auth.authenticated) {
+        showStatus(els.karakeepStatus, 'That API key was rejected — check it and try again.');
+        return;
+      }
+    }
+    await chrome.storage.local.set({ karakeepUrl: url, karakeepToken: finalToken });
+    showStatus(els.karakeepStatus, 'Connected.');
+  } catch (err) {
+    showStatus(els.karakeepStatus, err.message || 'Could not connect.');
+  }
+  await loadProviderFields();
   await loadBarSettings();
 });
 
 // --- Bookmarks bar ---
 
 async function loadBarSettings() {
-  const { serverUrl, barEnabled, pinnedFolder } = await chrome.storage.local.get([
-    'serverUrl',
-    'barEnabled',
-    'pinnedFolder',
-  ]);
-  barEnabledInput.checked = Boolean(barEnabled);
+  const raw = await chrome.storage.local.get(SyncMarkProviders.STORAGE_KEYS);
+  const providerId = raw.provider || 'syncmark';
+  els.barEnabled.checked = Boolean(raw.barEnabled);
 
-  const base = (serverUrl || '').trim().replace(/\/+$/, '');
-  if (!base) {
-    barFolderSelect.innerHTML = '<option value="">— set a server URL above first —</option>';
-    barFolderSelect.disabled = true;
+  const provider = SyncMarkProviders.get(providerId);
+  const config = SyncMarkProviders.readConfig(providerId, raw);
+
+  if (!provider.configured(config)) {
+    els.barFolder.innerHTML = '<option value="">— connect a service above first —</option>';
+    els.barFolder.disabled = true;
     return;
   }
 
   try {
-    const res = await fetch(`${base}/api/folders`, { credentials: 'include' });
-    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-    const folders = await res.json();
-
-    barFolderSelect.innerHTML = '<option value="">— choose a folder —</option>';
-    for (const { folder, count } of folders) {
+    const folders = await provider.listFolders(config);
+    els.barFolder.innerHTML = '<option value="">— choose a folder —</option>';
+    for (const f of folders) {
       const option = document.createElement('option');
-      option.value = folder;
-      option.textContent = `${folder} (${count})`;
-      barFolderSelect.appendChild(option);
+      option.value = f.id;
+      option.textContent = f.count != null ? `${f.name} (${f.count})` : f.name;
+      els.barFolder.appendChild(option);
     }
-    barFolderSelect.value = pinnedFolder || '';
-    barFolderSelect.disabled = false;
+    els.barFolder.value = raw.pinnedFolder || '';
+    els.barFolder.disabled = false;
   } catch {
-    barFolderSelect.innerHTML = '<option value="">— sign in via the toolbar popup first —</option>';
-    barFolderSelect.disabled = true;
+    els.barFolder.innerHTML = '<option value="">— check the connection above —</option>';
+    els.barFolder.disabled = true;
   }
 }
 
 async function saveBarSettings() {
   await chrome.storage.local.set({
-    barEnabled: barEnabledInput.checked,
-    pinnedFolder: barFolderSelect.value,
+    barEnabled: els.barEnabled.checked,
+    pinnedFolder: els.barFolder.value,
   });
-  barStatus.textContent = 'Saved.';
-  setTimeout(() => {
-    barStatus.textContent = '';
-  }, 2000);
+  showStatus(els.barStatus, 'Saved.');
 }
 
-barEnabledInput.addEventListener('change', saveBarSettings);
-barFolderSelect.addEventListener('change', saveBarSettings);
+els.barEnabled.addEventListener('change', saveBarSettings);
+els.barFolder.addEventListener('change', saveBarSettings);
 
-load();
+loadProviderFields();
 loadBarSettings();

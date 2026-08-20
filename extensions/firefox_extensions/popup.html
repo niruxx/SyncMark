@@ -11,12 +11,12 @@
 <body>
   <div id="app">
     <header class="topbar">
-      <h1>SyncMark</h1>
+      <h1>SyncMark <span id="provider-badge" class="provider-badge" hidden></span></h1>
       <button id="options-btn" class="icon-btn" title="Extension settings">⚙</button>
     </header>
 
     <section id="no-server-view" class="view" hidden>
-      <p class="hint">No SyncMark server is configured yet.</p>
+      <p class="hint" id="no-server-text">No bookmark service is configured yet.</p>
       <button id="no-server-options-btn" class="primary-btn">Open extension settings</button>
     </section>
 
@@ -61,12 +61,18 @@
           URL
           <input type="url" id="form-url" required placeholder="https://example.com" />
         </label>
-        <label>
+        <label id="form-folder-text-label">
           Folder
-          <input type="text" id="form-folder" list="folder-datalist" placeholder="e.g. Work/Projects" />
+          <input type="text" id="form-folder-text" list="folder-datalist" placeholder="e.g. Work/Projects" />
           <datalist id="folder-datalist"></datalist>
         </label>
-        <label class="checkbox">
+        <label id="form-folder-select-label" hidden>
+          Folder
+          <select id="form-folder-select">
+            <option value="">— unfiled —</option>
+          </select>
+        </label>
+        <label class="checkbox" id="form-favorite-label">
           <input type="checkbox" id="form-favorite" />
           Favorite
         </label>
@@ -79,6 +85,7 @@
     </section>
   </div>
 
+  <script src="providers.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

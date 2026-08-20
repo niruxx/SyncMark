@@ -22,7 +22,7 @@
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["providers.js", "background.js"]
   },
   "content_scripts": [
     {

@@ -1,5 +1,7 @@
 const state = {
-  serverUrl: '',
+  providerId: 'syncmark',
+  provider: SyncMarkProviders.get('syncmark'),
+  config: {},
   bookmarks: [],
   folders: [],
   lockMode: 'login', // 'login' | 'setup'
@@ -8,8 +10,10 @@ const state = {
 };
 
 const els = {
+  providerBadge: document.getElementById('provider-badge'),
   optionsBtn: document.getElementById('options-btn'),
   noServerView: document.getElementById('no-server-view'),
+  noServerText: document.getElementById('no-server-text'),
   noServerOptionsBtn: document.getElementById('no-server-options-btn'),
   lockView: document.getElementById('lock-view'),
   lockSubtitle: document.getElementById('lock-subtitle'),
@@ -32,8 +36,12 @@ const els = {
   bookmarkForm: document.getElementById('bookmark-form'),
   formTitle: document.getElementById('form-title'),
   formUrl: document.getElementById('form-url'),
-  formFolder: document.getElementById('form-folder'),
+  formFolderTextLabel: document.getElementById('form-folder-text-label'),
+  formFolderText: document.getElementById('form-folder-text'),
   folderDatalist: document.getElementById('folder-datalist'),
+  formFolderSelectLabel: document.getElementById('form-folder-select-label'),
+  formFolderSelect: document.getElementById('form-folder-select'),
+  formFavoriteLabel: document.getElementById('form-favorite-label'),
   formFavorite: document.getElementById('form-favorite'),
   formError: document.getElementById('form-error'),
   formCancel: document.getElementById('form-cancel'),
@@ -45,15 +53,6 @@ const FALLBACK_ICON =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%2399a1b3" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 4 6 4 9s-1.5 6.3-4 9c-2.5-2.7-4-6-4-9s1.5-6.3 4-9z"/></svg>'
   );
 
-function faviconUrl(url) {
-  try {
-    const { hostname } = new URL(url);
-    return `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostname)}`;
-  } catch {
-    return FALLBACK_ICON;
-  }
-}
-
 function showView(name) {
   for (const view of [els.noServerView, els.lockView, els.mainView, els.formView]) {
     view.hidden = true;
@@ -62,22 +61,19 @@ function showView(name) {
   target.hidden = false;
 }
 
-async function api(path, options = {}) {
-  const res = await fetch(`${state.serverUrl}${path}`, { ...options, credentials: 'include' });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || `Request failed: ${res.status}`);
-    err.status = res.status;
-    throw err;
-  }
-  if (res.status === 204) return null;
-  return res.json();
+function showNoServer(text) {
+  els.noServerText.textContent = text;
+  showView('noServer');
 }
 
 // --- Lock / sign in ---
+// Interactive sign-in only makes sense for SyncMark (always) and Linkwarden in password mode —
+// Linkwarden's access-token mode and Karakeep are configured entirely from the options page.
 
 function showLock(mode) {
   state.lockMode = mode;
+  const isSyncMark = state.providerId === 'syncmark';
+
   if (mode === 'setup') {
     els.lockSubtitle.textContent = 'First-time setup — create the account that protects your SyncMark server.';
     els.lockConfirm.hidden = false;
@@ -85,7 +81,9 @@ function showLock(mode) {
     els.lockPassword.minLength = 8;
     els.lockSubmit.textContent = 'Create account & sign in';
   } else {
-    els.lockSubtitle.textContent = 'Sign in to unlock your bookmarks.';
+    els.lockSubtitle.textContent = isSyncMark
+      ? 'Sign in to unlock your bookmarks.'
+      : `Your saved ${state.provider.label} session expired — sign in again.`;
     els.lockConfirm.hidden = true;
     els.lockConfirm.required = false;
     els.lockPassword.minLength = 0;
@@ -102,26 +100,31 @@ els.lockForm.addEventListener('submit', async (e) => {
   const username = els.lockUsername.value.trim();
   const password = els.lockPassword.value;
 
-  if (state.lockMode === 'setup') {
-    if (password.length < 8) {
-      els.lockError.textContent = 'Password must be at least 8 characters.';
-      els.lockError.hidden = false;
-      return;
-    }
-    if (password !== els.lockConfirm.value) {
-      els.lockError.textContent = 'Passwords do not match.';
-      els.lockError.hidden = false;
-      return;
-    }
+  if (state.lockMode === 'setup' && password.length < 8) {
+    els.lockError.textContent = 'Password must be at least 8 characters.';
+    els.lockError.hidden = false;
+    return;
+  }
+  if (state.lockMode === 'setup' && password !== els.lockConfirm.value) {
+    els.lockError.textContent = 'Passwords do not match.';
+    els.lockError.hidden = false;
+    return;
   }
 
   els.lockSubmit.disabled = true;
   try {
-    await api(`/api/auth/${state.lockMode === 'setup' ? 'setup' : 'login'}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    if (state.providerId === 'syncmark') {
+      if (state.lockMode === 'setup') {
+        await state.provider.setup(state.config, { username, password });
+      } else {
+        await state.provider.login(state.config, { username, password });
+      }
+    } else {
+      // Linkwarden password re-login: persist the freshly minted token for future popup opens.
+      const { token } = await state.provider.login(state.config, { username, password });
+      state.config.token = token;
+      await browser.storage.local.set({ linkwardenToken: token, linkwardenUsername: username });
+    }
     els.lockForm.reset();
     await enterApp();
   } catch (err) {
@@ -133,38 +136,51 @@ els.lockForm.addEventListener('submit', async (e) => {
 });
 
 els.signOutBtn.addEventListener('click', async () => {
-  try {
-    await api('/api/auth/logout', { method: 'POST' });
-  } catch {
-    /* ignore */
+  if (state.providerId === 'syncmark') {
+    await state.provider.logout(state.config).catch(() => {});
+    showLock('login');
+  } else if (state.providerId === 'linkwarden') {
+    await browser.storage.local.remove('linkwardenToken');
+    state.config.token = '';
+    showLock('login');
   }
-  showLock('login');
 });
 
 // --- Main list ---
 
 async function loadFolders() {
-  state.folders = await api('/api/folders');
+  state.folders = await state.provider.listFolders(state.config);
+
   els.folderSelect.innerHTML = '<option value="">All folders</option>';
   els.folderDatalist.innerHTML = '';
-  for (const { folder, count } of state.folders) {
-    const option = document.createElement('option');
-    option.value = folder;
-    option.textContent = `${folder} (${count})`;
-    els.folderSelect.appendChild(option);
+  els.formFolderSelect.innerHTML = '<option value="">— unfiled —</option>';
 
-    const dlOption = document.createElement('option');
-    dlOption.value = folder;
-    els.folderDatalist.appendChild(dlOption);
+  for (const f of state.folders) {
+    const label = f.count != null ? `${f.name} (${f.count})` : f.name;
+
+    const filterOption = document.createElement('option');
+    filterOption.value = f.id;
+    filterOption.textContent = label;
+    els.folderSelect.appendChild(filterOption);
+
+    if (state.provider.folderInputType === 'text') {
+      const dlOption = document.createElement('option');
+      dlOption.value = f.name;
+      els.folderDatalist.appendChild(dlOption);
+    } else {
+      const formOption = document.createElement('option');
+      formOption.value = f.id;
+      formOption.textContent = label;
+      els.formFolderSelect.appendChild(formOption);
+    }
   }
 }
 
 async function loadBookmarks() {
-  const params = new URLSearchParams();
-  if (els.searchInput.value.trim()) params.set('q', els.searchInput.value.trim());
-  if (els.folderSelect.value) params.set('folder', els.folderSelect.value);
-  params.set('sort', 'title-asc');
-  state.bookmarks = await api(`/api/bookmarks?${params.toString()}`);
+  state.bookmarks = await state.provider.listBookmarks(state.config, {
+    query: els.searchInput.value.trim(),
+    folderId: els.folderSelect.value,
+  });
   renderBookmarks();
 }
 
@@ -183,7 +199,7 @@ function renderBookmarkItem(bookmark) {
 
   const icon = document.createElement('img');
   icon.className = 'favicon';
-  icon.src = faviconUrl(bookmark.url);
+  icon.src = bookmark.icon || SyncMarkProviders.faviconUrl(bookmark.url);
   icon.alt = '';
   icon.addEventListener('error', () => {
     icon.src = FALLBACK_ICON;
@@ -195,7 +211,7 @@ function renderBookmarkItem(bookmark) {
   info.title = bookmark.url;
   const title = document.createElement('span');
   title.className = 'bookmark-title';
-  title.textContent = bookmark.title;
+  title.textContent = bookmark.title || bookmark.url;
   const url = document.createElement('span');
   url.className = 'bookmark-url';
   url.textContent = bookmark.url;
@@ -207,20 +223,24 @@ function renderBookmarkItem(bookmark) {
   const actions = document.createElement('div');
   actions.className = 'item-actions';
 
-  const starBtn = document.createElement('button');
-  starBtn.type = 'button';
-  starBtn.className = 'star-btn' + (bookmark.favorite ? ' active' : '');
-  starBtn.textContent = bookmark.favorite ? '★' : '☆';
-  starBtn.title = bookmark.favorite ? 'Remove from favorites' : 'Add to favorites';
-  starBtn.addEventListener('click', () => toggleFavorite(bookmark));
-  actions.appendChild(starBtn);
+  if (state.provider.supports.favorite) {
+    const starBtn = document.createElement('button');
+    starBtn.type = 'button';
+    starBtn.className = 'star-btn' + (bookmark.favorite ? ' active' : '');
+    starBtn.textContent = bookmark.favorite ? '★' : '☆';
+    starBtn.title = bookmark.favorite ? 'Remove from favorites' : 'Add to favorites';
+    starBtn.addEventListener('click', () => toggleFavorite(bookmark));
+    actions.appendChild(starBtn);
+  }
 
-  const editBtn = document.createElement('button');
-  editBtn.type = 'button';
-  editBtn.textContent = '✎';
-  editBtn.title = 'Edit';
-  editBtn.addEventListener('click', () => openForm('edit', bookmark));
-  actions.appendChild(editBtn);
+  if (state.provider.supports.edit) {
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.textContent = '✎';
+    editBtn.title = 'Edit';
+    editBtn.addEventListener('click', () => openForm('edit', bookmark));
+    actions.appendChild(editBtn);
+  }
 
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
@@ -240,11 +260,7 @@ async function openInNewTab(url) {
 
 async function toggleFavorite(bookmark) {
   try {
-    await api(`/api/bookmarks/${bookmark.id}/favorite`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ favorite: !bookmark.favorite }),
-    });
+    await state.provider.toggleFavorite(state.config, bookmark.id, !bookmark.favorite);
     await loadBookmarks();
   } catch (err) {
     handleApiError(err);
@@ -252,9 +268,9 @@ async function toggleFavorite(bookmark) {
 }
 
 async function deleteBookmark(bookmark) {
-  if (!confirm(`Delete "${bookmark.title}"?`)) return;
+  if (!confirm(`Delete "${bookmark.title || bookmark.url}"?`)) return;
   try {
-    await api(`/api/bookmarks/${bookmark.id}`, { method: 'DELETE' });
+    await state.provider.deleteBookmark(state.config, bookmark.id);
     await Promise.all([loadBookmarks(), loadFolders()]);
   } catch (err) {
     handleApiError(err);
@@ -276,8 +292,19 @@ function openForm(mode, bookmark) {
   els.formHeading.textContent = mode === 'edit' ? 'Edit bookmark' : 'Add bookmark';
   els.formTitle.value = bookmark ? bookmark.title || '' : '';
   els.formUrl.value = bookmark ? bookmark.url || '' : '';
-  els.formFolder.value = bookmark ? bookmark.folder || '' : '';
+
+  const useSelect = state.provider.folderInputType === 'select';
+  els.formFolderTextLabel.hidden = useSelect;
+  els.formFolderSelectLabel.hidden = !useSelect;
+  if (useSelect) {
+    els.formFolderSelect.value = bookmark ? bookmark.folder || '' : '';
+  } else {
+    els.formFolderText.value = bookmark ? bookmark.folder || '' : '';
+  }
+
+  els.formFavoriteLabel.hidden = !state.provider.supports.favorite;
   els.formFavorite.checked = Boolean(bookmark && bookmark.favorite);
+
   els.formError.hidden = true;
   showView('form');
   els.formTitle.focus();
@@ -289,7 +316,6 @@ els.formCancel.addEventListener('click', () => showView('main'));
 els.addCurrentBtn.addEventListener('click', async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab || !/^https?:\/\//i.test(tab.url || '')) {
-    els.formError.textContent = '';
     openForm('add', { title: '', url: '', folder: '', favorite: false });
     return;
   }
@@ -298,26 +324,20 @@ els.addCurrentBtn.addEventListener('click', async () => {
 
 els.bookmarkForm.addEventListener('submit', async (e) => {
   e.preventDefault();
+  const folder =
+    state.provider.folderInputType === 'select' ? els.formFolderSelect.value : els.formFolderText.value.trim();
   const payload = {
     title: els.formTitle.value.trim(),
     url: els.formUrl.value.trim(),
-    folder: els.formFolder.value.trim(),
+    folder,
     favorite: els.formFavorite.checked,
   };
 
   try {
     if (state.formMode === 'edit') {
-      await api(`/api/bookmarks/${state.editingId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      await state.provider.updateBookmark(state.config, state.editingId, payload);
     } else {
-      await api('/api/bookmarks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      await state.provider.addBookmark(state.config, payload);
     }
     showView('main');
     await Promise.all([loadBookmarks(), loadFolders()]);
@@ -332,7 +352,11 @@ els.bookmarkForm.addEventListener('submit', async (e) => {
 
 function handleApiError(err) {
   if (err.status === 401) {
-    showLock('login');
+    if (state.providerId === 'syncmark' || (state.providerId === 'linkwarden' && state.config.authMode === 'password')) {
+      showLock('login');
+    } else {
+      showNoServer(`Your saved ${state.provider.label} connection was rejected. Open extension settings to update it.`);
+    }
     return;
   }
   els.formError.textContent = err.message;
@@ -347,28 +371,44 @@ els.noServerOptionsBtn.addEventListener('click', () => browser.runtime.openOptio
 
 async function enterApp() {
   await Promise.all([loadFolders(), loadBookmarks()]);
+  els.signOutBtn.hidden =
+    !(state.providerId === 'syncmark' || (state.providerId === 'linkwarden' && state.config.authMode === 'password'));
   showView('main');
 }
 
 async function init() {
-  const { serverUrl } = await browser.storage.local.get('serverUrl');
-  if (!serverUrl) {
-    showView('noServer');
+  const raw = await browser.storage.local.get(SyncMarkProviders.STORAGE_KEYS);
+  state.providerId = raw.provider || 'syncmark';
+  state.provider = SyncMarkProviders.get(state.providerId);
+  state.config = SyncMarkProviders.readConfig(state.providerId, raw);
+
+  if (state.providerId === 'syncmark') {
+    els.providerBadge.hidden = true;
+  } else {
+    els.providerBadge.hidden = false;
+    els.providerBadge.textContent = state.provider.label;
+  }
+
+  if (!state.provider.configured(state.config)) {
+    showNoServer(`No ${state.provider.label} connection is configured yet.`);
     return;
   }
-  state.serverUrl = serverUrl.replace(/\/+$/, '');
 
   try {
-    const status = await api('/api/auth/status');
+    const status = await state.provider.testAuth(state.config);
     if (status.setupRequired) {
       showLock('setup');
     } else if (!status.authenticated) {
-      showLock('login');
+      if (state.providerId === 'syncmark' || (state.providerId === 'linkwarden' && state.config.authMode === 'password')) {
+        showLock('login');
+      } else {
+        showNoServer(`Your saved ${state.provider.label} connection was rejected. Open extension settings to update it.`);
+      }
     } else {
       await enterApp();
     }
   } catch {
-    showView('noServer');
+    showNoServer(`Couldn't reach your ${state.provider.label} server. Check the address in extension settings.`);
   }
 }
 
