@@ -69,6 +69,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'SYNCMARK_OPEN_OPTIONS') {
     chrome.runtime.openOptionsPage();
   }
+  if (message?.type === 'SYNCMARK_OPEN_ADD_BOOKMARK') {
+    const params = new URLSearchParams({ context: 'window', mode: 'add', url: message.url || '', title: message.title || '' });
+    chrome.windows.create({
+      url: chrome.runtime.getURL(`popup.html?${params.toString()}`),
+      type: 'popup',
+      width: 380,
+      height: 560,
+    });
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

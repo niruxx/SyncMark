@@ -115,6 +115,21 @@
         <option value="">— connect a service above first —</option>
       </select>
     </label>
+    <label>
+      Layout
+      <select id="bar-layout-select">
+        <option value="bar">Top bar (under the address bar)</option>
+        <option value="sidebar">Sidebar</option>
+      </select>
+    </label>
+    <div id="bar-sidebar-row" hidden>
+      <p class="hint">
+        Sidebar mode uses the browser's own side panel, so it stays available across every tab — including new-tab and
+        settings pages the top bar can't reach. Open it once and the browser keeps it available from then on.
+      </p>
+      <button type="button" id="bar-open-sidebar-btn">Open sidebar</button>
+      <span id="bar-sidebar-status" class="hint"></span>
+    </div>
     <span id="bar-status" class="hint"></span>
   </div>
   <script src="providers.js"></script>

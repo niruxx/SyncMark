@@ -11,7 +11,10 @@
     "page": "options.html",
     "open_in_tab": true
   },
-  "permissions": ["storage", "activeTab"],
+  "side_panel": {
+    "default_path": "popup.html?context=sidebar"
+  },
+  "permissions": ["storage", "activeTab", "sidePanel"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"

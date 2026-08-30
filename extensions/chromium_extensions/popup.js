@@ -1,3 +1,14 @@
+const params = new URLSearchParams(location.search);
+// Opened as a persistent side panel (Firefox sidebar_action / Chrome side_panel) instead of the
+// toolbar dropdown — same page, different context, so it needs fluid sizing (see popup.css).
+const isSidebarView = params.get('context') === 'sidebar';
+// Opened as a standalone popup-style window from the injected page bar's "Add bookmark" button
+// (see bar.js / background.js) — pre-fill the add form with the page it was opened for, and close
+// the window on save/cancel instead of returning to the full list.
+const isStandaloneAddWindow = params.get('context') === 'window';
+
+if (isSidebarView) document.documentElement.classList.add('sidebar-mode');
+
 const state = {
   providerId: 'syncmark',
   provider: SyncMarkProviders.get('syncmark'),
@@ -23,6 +34,7 @@ const els = {
   lockConfirm: document.getElementById('lock-confirm'),
   lockError: document.getElementById('lock-error'),
   lockSubmit: document.getElementById('lock-submit'),
+  sidebarUnpinBtn: document.getElementById('sidebar-unpin-btn'),
   mainView: document.getElementById('main-view'),
   addCurrentBtn: document.getElementById('add-current-btn'),
   searchInput: document.getElementById('search-input'),
@@ -93,6 +105,24 @@ function showLock(mode) {
   showView('lock');
 }
 
+// Kept in sync with the Firefox build, where broad host_permissions stay inactive until the
+// user approves them here. Chrome grants these at install, so `request` resolves true
+// immediately without a prompt.
+async function ensureHostPermission(url) {
+  let origin;
+  try {
+    origin = `${new URL(url).origin}/*`;
+  } catch {
+    return true;
+  }
+  try {
+    return await chrome.permissions.request({ origins: [origin] });
+  } catch (err) {
+    console.error('SyncMark: host permission request failed', err);
+    return false;
+  }
+}
+
 els.lockForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   els.lockError.hidden = true;
@@ -107,6 +137,12 @@ els.lockForm.addEventListener('submit', async (e) => {
   }
   if (state.lockMode === 'setup' && password !== els.lockConfirm.value) {
     els.lockError.textContent = 'Passwords do not match.';
+    els.lockError.hidden = false;
+    return;
+  }
+
+  if (!(await ensureHostPermission(state.config.serverUrl))) {
+    els.lockError.textContent = 'Grant access to this site to continue, then try again.';
     els.lockError.hidden = false;
     return;
   }
@@ -311,7 +347,10 @@ function openForm(mode, bookmark) {
 }
 
 els.addBtn.addEventListener('click', () => openForm('add', null));
-els.formCancel.addEventListener('click', () => showView('main'));
+els.formCancel.addEventListener('click', () => {
+  if (isStandaloneAddWindow) return window.close();
+  showView('main');
+});
 
 els.addCurrentBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -339,6 +378,7 @@ els.bookmarkForm.addEventListener('submit', async (e) => {
     } else {
       await state.provider.addBookmark(state.config, payload);
     }
+    if (isStandaloneAddWindow) return window.close();
     showView('main');
     await Promise.all([loadBookmarks(), loadFolders()]);
   } catch (err) {
@@ -367,6 +407,15 @@ function handleApiError(err) {
 els.optionsBtn.addEventListener('click', () => chrome.runtime.openOptionsPage());
 els.noServerOptionsBtn.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
+if (isSidebarView) {
+  els.sidebarUnpinBtn.hidden = false;
+  // Chrome deliberately provides no API to close the side panel programmatically — this just
+  // flips the stored preference, and the user closes the panel themselves via its own toggle.
+  els.sidebarUnpinBtn.addEventListener('click', () => {
+    chrome.storage.local.set({ barLayout: 'bar' });
+  });
+}
+
 // --- Boot ---
 
 async function enterApp() {
@@ -374,6 +423,10 @@ async function enterApp() {
   els.signOutBtn.hidden =
     !(state.providerId === 'syncmark' || (state.providerId === 'linkwarden' && state.config.authMode === 'password'));
   showView('main');
+
+  if (params.get('mode') === 'add') {
+    openForm('add', { title: params.get('title') || '', url: params.get('url') || '', folder: '', favorite: false });
+  }
 }
 
 async function init() {

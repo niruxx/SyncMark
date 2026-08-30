@@ -19,8 +19,16 @@
     "page": "options.html",
     "open_in_tab": true
   },
+  "sidebar_action": {
+    "default_panel": "popup.html?context=sidebar",
+    "default_icon": "icons/icon.svg",
+    "default_title": "SyncMark"
+  },
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["http://*/*", "https://*/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
   "background": {
     "scripts": ["providers.js", "background.js"]
   },

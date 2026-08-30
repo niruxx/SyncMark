@@ -380,6 +380,7 @@ const SyncMarkProviders = (function () {
     'karakeepToken',
     'pinnedFolder',
     'barEnabled',
+    'barLayout',
     'barCache',
   ];
 

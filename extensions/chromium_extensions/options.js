@@ -29,6 +29,10 @@ const els = {
 
   barEnabled: document.getElementById('bar-enabled-input'),
   barFolder: document.getElementById('bar-folder-select'),
+  barLayout: document.getElementById('bar-layout-select'),
+  barSidebarRow: document.getElementById('bar-sidebar-row'),
+  barOpenSidebarBtn: document.getElementById('bar-open-sidebar-btn'),
+  barSidebarStatus: document.getElementById('bar-sidebar-status'),
   barStatus: document.getElementById('bar-status'),
 };
 
@@ -47,6 +51,24 @@ function showProviderPanel(id) {
 
 function requireHttpUrl(url) {
   return /^https?:\/\/.+/i.test(url);
+}
+
+// Chrome grants declared host_permissions at install, so `request` resolves true immediately
+// without a prompt — kept in sync with the Firefox build, where broad host_permissions (e.g.
+// "http://*/*") are treated as ad-hoc and stay inactive until the user approves them here.
+async function ensureHostPermission(url) {
+  let origin;
+  try {
+    origin = `${new URL(url).origin}/*`;
+  } catch {
+    return true; // malformed URL — let the caller's own validation surface the real error
+  }
+  try {
+    return await chrome.permissions.request({ origins: [origin] });
+  } catch (err) {
+    console.error('SyncMark: host permission request failed', err);
+    return false;
+  }
 }
 
 // --- Load current settings into the form ---
@@ -96,6 +118,10 @@ els.syncmarkForm.addEventListener('submit', async (e) => {
     showStatus(els.syncmarkStatus, 'URL must start with http:// or https://');
     return;
   }
+  if (!(await ensureHostPermission(url))) {
+    showStatus(els.syncmarkStatus, 'Grant access to this site to continue, then try again.');
+    return;
+  }
   await chrome.storage.local.set({ serverUrl: url });
   showStatus(els.syncmarkStatus, 'Saved.');
   await loadBarSettings();
@@ -108,6 +134,11 @@ els.linkwardenForm.addEventListener('submit', async (e) => {
   const url = els.linkwardenUrl.value.trim().replace(/\/+$/, '');
   if (!requireHttpUrl(url)) {
     showStatus(els.linkwardenStatus, 'URL must start with http:// or https://');
+    return;
+  }
+
+  if (!(await ensureHostPermission(url))) {
+    showStatus(els.linkwardenStatus, 'Grant access to this site to continue, then try again.');
     return;
   }
 
@@ -174,6 +205,11 @@ els.karakeepForm.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (!(await ensureHostPermission(url))) {
+    showStatus(els.karakeepStatus, 'Grant access to this site to continue, then try again.');
+    return;
+  }
+
   const provider = SyncMarkProviders.get('karakeep');
   const { karakeepToken: existingToken } = await chrome.storage.local.get('karakeepToken');
   const token = els.karakeepToken.value.trim();
@@ -207,6 +243,8 @@ async function loadBarSettings() {
   const raw = await chrome.storage.local.get(SyncMarkProviders.STORAGE_KEYS);
   const providerId = raw.provider || 'syncmark';
   els.barEnabled.checked = Boolean(raw.barEnabled);
+  els.barLayout.value = raw.barLayout || 'bar';
+  els.barSidebarRow.hidden = els.barLayout.value !== 'sidebar';
 
   const provider = SyncMarkProviders.get(providerId);
   const config = SyncMarkProviders.readConfig(providerId, raw);
@@ -238,12 +276,32 @@ async function saveBarSettings() {
   await chrome.storage.local.set({
     barEnabled: els.barEnabled.checked,
     pinnedFolder: els.barFolder.value,
+    barLayout: els.barLayout.value,
   });
   showStatus(els.barStatus, 'Saved.');
 }
 
 els.barEnabled.addEventListener('change', saveBarSettings);
 els.barFolder.addEventListener('change', saveBarSettings);
+els.barLayout.addEventListener('change', async () => {
+  els.barSidebarRow.hidden = els.barLayout.value !== 'sidebar';
+  els.barSidebarStatus.textContent = '';
+  await saveBarSettings();
+});
+
+els.barOpenSidebarBtn.addEventListener('click', async () => {
+  if (!chrome.sidePanel) {
+    els.barSidebarStatus.textContent = "This browser doesn't support side panels.";
+    return;
+  }
+  try {
+    const win = await chrome.windows.getCurrent();
+    await chrome.sidePanel.open({ windowId: win.id });
+  } catch (err) {
+    console.error('SyncMark: sidePanel.open failed', err);
+    els.barSidebarStatus.textContent = 'Could not open the side panel automatically — use the side panel icon in the toolbar.';
+  }
+});
 
 loadProviderFields();
 loadBarSettings();

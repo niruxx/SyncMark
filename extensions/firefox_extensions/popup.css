@@ -35,6 +35,34 @@ body {
   flex-direction: column;
 }
 
+/* Same page rendered as a persistent side panel (Firefox sidebar_action / Chrome side_panel)
+   instead of the fixed-size toolbar dropdown — let it fill whatever width/height the browser
+   gives the panel, and let the bookmark list use the extra vertical space instead of scrolling
+   in its own little 300px box. */
+html.sidebar-mode body {
+  width: 100%;
+  min-width: 220px;
+  max-width: none;
+  height: 100vh;
+}
+
+html.sidebar-mode #app {
+  height: 100%;
+}
+
+html.sidebar-mode .view:not([hidden]) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+html.sidebar-mode #bookmark-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
 .topbar {
   display: flex;
   align-items: center;

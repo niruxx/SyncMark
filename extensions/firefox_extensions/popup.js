@@ -1,3 +1,14 @@
+const params = new URLSearchParams(location.search);
+// Opened as a persistent side panel (Firefox sidebar_action / Chrome side_panel) instead of the
+// toolbar dropdown — same page, different context, so it needs fluid sizing (see popup.css).
+const isSidebarView = params.get('context') === 'sidebar';
+// Opened as a standalone popup-style window from the injected page bar's "Add bookmark" button
+// (see bar.js / background.js) — pre-fill the add form with the page it was opened for, and close
+// the window on save/cancel instead of returning to the full list.
+const isStandaloneAddWindow = params.get('context') === 'window';
+
+if (isSidebarView) document.documentElement.classList.add('sidebar-mode');
+
 const state = {
   providerId: 'syncmark',
   provider: SyncMarkProviders.get('syncmark'),
@@ -23,6 +34,7 @@ const els = {
   lockConfirm: document.getElementById('lock-confirm'),
   lockError: document.getElementById('lock-error'),
   lockSubmit: document.getElementById('lock-submit'),
+  sidebarUnpinBtn: document.getElementById('sidebar-unpin-btn'),
   mainView: document.getElementById('main-view'),
   addCurrentBtn: document.getElementById('add-current-btn'),
   searchInput: document.getElementById('search-input'),
@@ -93,6 +105,31 @@ function showLock(mode) {
   showView('lock');
 }
 
+// Firefox doesn't activate broad host_permissions just because they're listed in the manifest —
+// it treats them as ad-hoc and only grants them once the user approves via this API. Without it,
+// fetches from extension pages to a self-hosted server fail with "NetworkError when attempting
+// to fetch resource" even though the manifest looks correct. Chrome grants these at install time,
+// so `request` resolves true immediately there without a prompt.
+//
+// `request()` must be called synchronously in direct response to the user's click — Firefox
+// tracks "handling user input" per call stack, and even one `await` beforehand (e.g. checking
+// `permissions.contains()` first) drops that flag, so `request()` throws instead of prompting.
+// That's why this is the very first `await` in every caller, with no pre-check.
+async function ensureHostPermission(url) {
+  let origin;
+  try {
+    origin = `${new URL(url).origin}/*`;
+  } catch {
+    return true;
+  }
+  try {
+    return await browser.permissions.request({ origins: [origin] });
+  } catch (err) {
+    console.error('SyncMark: host permission request failed', err);
+    return false;
+  }
+}
+
 els.lockForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   els.lockError.hidden = true;
@@ -107,6 +144,12 @@ els.lockForm.addEventListener('submit', async (e) => {
   }
   if (state.lockMode === 'setup' && password !== els.lockConfirm.value) {
     els.lockError.textContent = 'Passwords do not match.';
+    els.lockError.hidden = false;
+    return;
+  }
+
+  if (!(await ensureHostPermission(state.config.serverUrl))) {
+    els.lockError.textContent = 'Grant access to this site to continue, then try again.';
     els.lockError.hidden = false;
     return;
   }
@@ -311,7 +354,10 @@ function openForm(mode, bookmark) {
 }
 
 els.addBtn.addEventListener('click', () => openForm('add', null));
-els.formCancel.addEventListener('click', () => showView('main'));
+els.formCancel.addEventListener('click', () => {
+  if (isStandaloneAddWindow) return window.close();
+  showView('main');
+});
 
 els.addCurrentBtn.addEventListener('click', async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -339,6 +385,7 @@ els.bookmarkForm.addEventListener('submit', async (e) => {
     } else {
       await state.provider.addBookmark(state.config, payload);
     }
+    if (isStandaloneAddWindow) return window.close();
     showView('main');
     await Promise.all([loadBookmarks(), loadFolders()]);
   } catch (err) {
@@ -367,6 +414,21 @@ function handleApiError(err) {
 els.optionsBtn.addEventListener('click', () => browser.runtime.openOptionsPage());
 els.noServerOptionsBtn.addEventListener('click', () => browser.runtime.openOptionsPage());
 
+if (isSidebarView) {
+  els.sidebarUnpinBtn.hidden = false;
+  // browser.sidebarAction.close() has no Chrome equivalent — Chrome deliberately doesn't let
+  // extensions close the side panel programmatically, so this just flips the stored preference
+  // there and the user closes the panel themselves via its own toggle.
+  els.sidebarUnpinBtn.addEventListener('click', async () => {
+    await browser.storage.local.set({ barLayout: 'bar' });
+    try {
+      await browser.sidebarAction.close();
+    } catch {
+      // Chrome (no sidebarAction), or already closed — nothing else to do here.
+    }
+  });
+}
+
 // --- Boot ---
 
 async function enterApp() {
@@ -374,6 +436,10 @@ async function enterApp() {
   els.signOutBtn.hidden =
     !(state.providerId === 'syncmark' || (state.providerId === 'linkwarden' && state.config.authMode === 'password'));
   showView('main');
+
+  if (params.get('mode') === 'add') {
+    openForm('add', { title: params.get('title') || '', url: params.get('url') || '', folder: '', favorite: false });
+  }
 }
 
 async function init() {
