@@ -60,9 +60,17 @@ html.page-leaving {
 
   --star: #f9ab00;
 
-  --elev-1: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
-  --elev-2: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
-  --elev-3: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+  /* Ambient-only accent hues — used by the aurora backdrop (and nothing
+     else), so the blue primary stays the app's single identity colour. */
+  --accent-1: #6d5efc;
+  --accent-2: #14b8c4;
+  --aurora-opacity: 0.62;
+
+  /* Softer, wider shadows than Material's default greys — less "outlined
+     box", more "floating surface". */
+  --elev-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
+  --elev-2: 0 2px 4px rgba(16, 24, 40, 0.06), 0 6px 16px rgba(16, 24, 40, 0.1);
+  --elev-3: 0 4px 8px rgba(16, 24, 40, 0.06), 0 16px 36px rgba(16, 24, 40, 0.16);
 
   --corner-xs: 4px;
   --corner-sm: 8px;
@@ -73,6 +81,11 @@ html.page-leaving {
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  /* Slight overshoot, for moments that should feel physical (presses,
+     toasts, dialogs) rather than merely animated. */
+  --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+  /* Long, gentle deceleration — for entrances that shouldn't draw the eye. */
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 [data-theme='dark'] {
@@ -103,13 +116,37 @@ html.page-leaving {
 
   --star: #fdd663;
 
-  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
-  --elev-2: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px 2px rgba(0, 0, 0, 0.15);
-  --elev-3: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+  --accent-1: #a597ff;
+  --accent-2: #4fd8e8;
+  /* A dark ground swallows a soft wash, so dark needs *more* of it than
+     light does to read as the same amount of colour. */
+  --aurora-opacity: 0.8;
+
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --elev-2: 0 2px 4px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.45);
+  --elev-3: 0 4px 8px rgba(0, 0, 0, 0.4), 0 16px 36px rgba(0, 0, 0, 0.55);
 }
 
 * {
   box-sizing: border-box;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 24%, transparent);
+  color: var(--on-surface);
+}
+
+/* Hairline + soft shadow, rather than shadow alone: against a coloured
+   backdrop a pure-shadow edge goes mushy, especially in dark mode where
+   the shadow and the background are nearly the same value. */
+.bookmark-table,
+.contact-table,
+.file-table,
+.bookmark-card,
+.settings-section,
+.calendar-grid,
+.calendar-day-panel {
+  border: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
 }
 
 html {
@@ -129,29 +166,82 @@ body {
   transition: background-color 0.25s var(--ease), color 0.25s var(--ease);
 }
 
-/* Ambient wash — only after sign-in (see auth.js), very restrained. */
-body.bg-animated::before {
+/* ---------- Ambient aurora ----------
+   Two blurred gradient fields drifting on separate, deliberately
+   non-divisible cycles (32s / 44s), so they slide past each other instead
+   of looping in lockstep — the difference between "one blob sliding" and
+   something that reads as slow, organic movement. Used behind the app
+   (body.bg-animated, added after sign-in) and behind the sign-in card
+   (.auth-bg), so both screens share the same backdrop. */
+
+body.bg-animated::before,
+body.bg-animated::after,
+.auth-bg::before,
+.auth-bg::after {
   content: '';
   position: fixed;
-  inset: -10%;
+  inset: -25%;
   z-index: -1;
   pointer-events: none;
+  filter: blur(90px) saturate(120%);
+  opacity: var(--aurora-opacity);
+  will-change: transform;
+}
+
+body.bg-animated::before,
+.auth-bg::before {
   background:
-    radial-gradient(circle at 15% 15%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 45%),
-    radial-gradient(circle at 85% 25%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 45%);
-  filter: blur(80px);
-  opacity: 0.7;
+    radial-gradient(38% 44% at 18% 22%, color-mix(in srgb, var(--primary) 46%, transparent), transparent 70%),
+    radial-gradient(32% 38% at 78% 28%, color-mix(in srgb, var(--accent-1) 38%, transparent), transparent 70%);
+}
+
+body.bg-animated::after,
+.auth-bg::after {
+  background:
+    radial-gradient(34% 40% at 70% 78%, color-mix(in srgb, var(--accent-2) 34%, transparent), transparent 70%),
+    radial-gradient(30% 36% at 26% 82%, color-mix(in srgb, var(--primary) 32%, transparent), transparent 70%);
+}
+
+/* A dark ground drinks colour: the same mix percentages that read clearly
+   on white all but disappear on near-black, so dark mode gets richer stops
+   rather than just relying on --aurora-opacity to compensate. */
+[data-theme='dark'] body.bg-animated::before,
+[data-theme='dark'] .auth-bg::before {
+  background:
+    radial-gradient(40% 46% at 18% 22%, color-mix(in srgb, var(--primary) 85%, transparent), transparent 72%),
+    radial-gradient(34% 40% at 78% 28%, color-mix(in srgb, var(--accent-1) 78%, transparent), transparent 72%);
+}
+
+[data-theme='dark'] body.bg-animated::after,
+[data-theme='dark'] .auth-bg::after {
+  background:
+    radial-gradient(36% 42% at 70% 78%, color-mix(in srgb, var(--accent-2) 75%, transparent), transparent 72%),
+    radial-gradient(32% 38% at 26% 82%, color-mix(in srgb, var(--primary) 70%, transparent), transparent 72%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  body.bg-animated::before {
-    animation: bgDrift 30s ease-in-out infinite alternate;
+  body.bg-animated::before,
+  .auth-bg::before {
+    animation: auroraDriftA 32s ease-in-out infinite;
+  }
+
+  body.bg-animated::after,
+  .auth-bg::after {
+    animation: auroraDriftB 44s ease-in-out infinite;
   }
 }
 
-@keyframes bgDrift {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(2%, -2%) scale(1.08); }
+/* Each returns exactly to its 0% pose, so an infinite loop never snaps. */
+@keyframes auroraDriftA {
+  0% { transform: translate3d(-3%, -2%, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(4%, 3%, 0) scale(1.16) rotate(7deg); }
+  100% { transform: translate3d(-3%, -2%, 0) scale(1) rotate(0deg); }
+}
+
+@keyframes auroraDriftB {
+  0% { transform: translate3d(3%, 2%, 0) scale(1.12) rotate(0deg); }
+  50% { transform: translate3d(-4%, -3%, 0) scale(1) rotate(-9deg); }
+  100% { transform: translate3d(3%, 2%, 0) scale(1.12) rotate(0deg); }
 }
 
 /* ---------- Top progress bar ---------- */
@@ -267,11 +357,24 @@ code {
   gap: 1rem;
   padding: 0.6rem 1.5rem;
   background: var(--surface-dim);
+  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 55%, transparent);
   position: sticky;
   top: 0;
   z-index: 40;
   flex-wrap: wrap;
   transition: background-color 0.25s var(--ease);
+}
+
+/* Frosted app bar — content scrolls under it and the aurora glows through,
+   instead of the bar sitting as an opaque band over the backdrop. Only
+   applied where backdrop-filter actually works; elsewhere the opaque
+   background above stays, which is the readable fallback. */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .topbar {
+    background: color-mix(in srgb, var(--surface-dim) 72%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+  }
 }
 
 .topbar-left {
@@ -353,7 +456,7 @@ code {
 
 .topbar-search:focus-within {
   background: var(--surface);
-  box-shadow: var(--elev-2);
+  box-shadow: var(--elev-2), 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .topbar-search .search-icon {
@@ -600,10 +703,13 @@ button::after {
   }
 }
 
+/* A 2px ring plus a soft halo — as visible as the old 3px slab, but it
+   reads as part of the design rather than a browser artifact. */
 .button:focus-visible,
 button:focus-visible {
-  outline: 3px solid var(--primary);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
 button:disabled {
@@ -685,6 +791,8 @@ button.danger {
   width: 40px;
   height: 40px;
   flex-shrink: 0;
+  transition: transform 0.28s var(--ease-spring), background-color 0.15s var(--ease),
+    color 0.15s var(--ease);
 }
 
 .star-btn:hover {
@@ -692,6 +800,13 @@ button.danger {
   color: var(--star);
   box-shadow: none;
   filter: none;
+}
+
+/* Presses in hard and springs back out — the tactile half of favouriting.
+   Deliberately a press effect rather than an animation keyed to .active,
+   which would re-fire on every row in the list each time one is toggled. */
+.star-btn:active {
+  transform: scale(0.82);
 }
 
 .star-btn.active {
@@ -780,7 +895,8 @@ button.danger {
   white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 500;
-  transition: background-color 0.15s var(--ease), color 0.15s var(--ease);
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease),
+    transform 0.18s var(--ease-out-soft);
 }
 
 .folder-btn .material-symbols-outlined {
@@ -803,11 +919,19 @@ button.danger {
   flex-shrink: 0;
 }
 
+/* Nudging right on hover suits a pill better than a left accent bar would —
+   the pill's own rounded ends clip anything drawn at its edge. */
 .folder-btn:hover {
   background: var(--surface-container-high);
   color: var(--on-surface);
   box-shadow: none;
   filter: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .folder-btn:hover {
+    transform: translateX(3px);
+  }
 }
 
 .folder-btn.active {
@@ -1044,7 +1168,7 @@ button.danger {
 }
 
 .bookmark-table tbody tr {
-  transition: background-color 0.12s var(--ease);
+  transition: background-color 0.12s var(--ease), box-shadow 0.15s var(--ease);
   cursor: grab;
 }
 
@@ -1052,8 +1176,11 @@ button.danger {
   border-bottom: none;
 }
 
+/* An inset edge marks the hovered row without shifting layout — a border
+   or transform here would jitter the whole table on every mouse move. */
 .bookmark-table tbody tr:hover {
   background: var(--surface-container-low);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .bookmark-table td:nth-child(2) {
@@ -1091,18 +1218,21 @@ button.danger {
 .empty-state {
   color: var(--on-surface-variant);
   text-align: center;
-  margin-top: 4rem;
+  margin: 4rem auto 0;
+  max-width: 34rem;
+  line-height: 1.65;
   font-size: 0.95rem;
+  animation: itemIn 0.45s var(--ease-out-soft) both;
 }
 
 @keyframes itemIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .bookmark-table tbody tr,
 .bookmark-card {
-  animation: itemIn 0.28s var(--ease) both;
+  animation: itemIn 0.34s var(--ease-out-soft) both;
 }
 
 /* ---------- Drag and drop ---------- */
@@ -1225,7 +1355,7 @@ button.danger {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(10, 12, 16, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1235,6 +1365,16 @@ button.danger {
   visibility: hidden;
   pointer-events: none;
   transition: opacity 0.2s var(--ease), visibility 0s linear 0.2s;
+}
+
+/* Blurring what's behind the dialog pushes the page back rather than just
+   dimming it — the dialog reads as the only thing in focus. */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .modal-backdrop {
+    background: rgba(10, 12, 16, 0.36);
+    -webkit-backdrop-filter: blur(6px) saturate(110%);
+    backdrop-filter: blur(6px) saturate(110%);
+  }
 }
 
 .modal-backdrop.is-open {
@@ -1251,11 +1391,13 @@ button.danger {
   width: 100%;
   max-width: 440px;
   box-shadow: var(--elev-3);
-  transform: translateY(16px) scale(0.96);
-  transition: transform 0.25s var(--ease-emphasized);
+  opacity: 0;
+  transform: translateY(20px) scale(0.94);
+  transition: transform 0.36s var(--ease-spring), opacity 0.22s var(--ease);
 }
 
 .modal-backdrop.is-open .modal {
+  opacity: 1;
   transform: translateY(0) scale(1);
 }
 
@@ -1418,25 +1560,14 @@ button.danger {
   overflow: hidden;
 }
 
-/* Ambient wash behind the login/first-run card — always on, unlike the
-   post-login body.bg-animated version, so the very first screen isn't flat. */
+/* The aurora itself lives on .auth-bg's pseudo-elements (see "Ambient
+   aurora" above) so the sign-in screen and the signed-in app share one
+   backdrop — this element is just the anchor they attach to. */
 .auth-bg {
   position: absolute;
-  inset: -10%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 45%),
-    radial-gradient(circle at 80% 30%, color-mix(in srgb, var(--primary) 11%, transparent), transparent 45%),
-    radial-gradient(circle at 50% 90%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 50%);
-  filter: blur(70px);
-  opacity: 0.8;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .auth-bg {
-    animation: bgDrift 26s ease-in-out infinite alternate;
-  }
 }
 
 /* Fallback for browsers without document.startViewTransition (Firefox):
@@ -1614,12 +1745,12 @@ button.danger {
   background: var(--surface-container-highest);
   color: var(--on-surface);
   padding: 0.9rem 1.25rem;
-  border-radius: var(--corner-xs);
+  border-radius: var(--corner-md);
   font-size: 0.875rem;
   box-shadow: var(--elev-3);
   opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+  transform: translateY(12px) scale(0.96);
+  transition: opacity 0.28s var(--ease-out-soft), transform 0.4s var(--ease-spring);
   pointer-events: auto;
   max-width: 380px;
   border-left: 4px solid var(--primary);
@@ -1627,7 +1758,7 @@ button.danger {
 
 .toast.show {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 .toast-success {
@@ -1917,8 +2048,16 @@ button.danger {
   color: var(--on-surface-variant);
   font-size: 0.875rem;
   letter-spacing: 0.12em;
-  margin: 2rem 0 0.5rem;
+  margin: 2rem 0 0.25rem;
   opacity: 0.7;
+}
+
+.settings-version {
+  text-align: center;
+  color: var(--on-surface-variant);
+  font-size: 0.75rem;
+  margin: 0 0 0.5rem;
+  opacity: 0.5;
 }
 
 .inline-rename-input {
@@ -2038,8 +2177,8 @@ button.danger {
 }
 
 .contact-table tbody tr {
-  animation: itemIn 0.28s var(--ease) both;
-  transition: background-color 0.12s var(--ease);
+  animation: itemIn 0.34s var(--ease-out-soft) both;
+  transition: background-color 0.12s var(--ease), box-shadow 0.15s var(--ease);
 }
 
 .contact-table tbody tr:last-child td {
@@ -2048,6 +2187,7 @@ button.danger {
 
 .contact-table tbody tr:hover {
   background: var(--surface-container-low);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .contact-avatar {
@@ -2548,8 +2688,8 @@ button.danger {
 }
 
 .file-table tbody tr {
-  animation: itemIn 0.28s var(--ease) both;
-  transition: background-color 0.12s var(--ease);
+  animation: itemIn 0.34s var(--ease-out-soft) both;
+  transition: background-color 0.12s var(--ease), box-shadow 0.15s var(--ease);
   cursor: default;
 }
 
@@ -2559,6 +2699,7 @@ button.danger {
 
 .file-table tbody tr:hover {
   background: var(--surface-container-low);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 /* ---------- Calendar ---------- */
@@ -3366,6 +3507,6 @@ textarea {
 
 @media (prefers-reduced-motion: no-preference) {
   .content-fade-in {
-    animation: itemIn 0.35s var(--ease) both;
+    animation: itemIn 0.45s var(--ease-out-soft) both;
   }
 }
