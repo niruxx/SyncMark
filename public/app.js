@@ -1162,3 +1162,4 @@ setView(state.view);
 loadFolders();
 loadBookmarks();
 loadAccountBadge();
+applyFeatureGate();

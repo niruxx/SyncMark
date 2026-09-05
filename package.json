@@ -4,7 +4,8 @@
   "description": "Self-hosted bookmark manager server: import browser bookmark exports (HTML/JSON) and browse, edit, and remove them from the web.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "reset-password": "node scripts/reset-password.js"
   },
   "engines": {
     "node": ">=18"

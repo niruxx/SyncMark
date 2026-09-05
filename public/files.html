@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Files — SyncMark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div id="app-shell" hidden data-page-feature="files">
+    <header class="topbar">
+      <div class="topbar-left">
+        <a class="brand" href="index.html">
+          <span class="material-symbols-outlined brand-icon">bookmarks</span>
+          <h1>SyncMark</h1>
+        </a>
+        <nav class="nav">
+          <a href="index.html" data-feature="bookmarks">Bookmarks</a>
+          <a href="contacts.html" data-feature="contacts">Contacts</a>
+          <a href="calendar.html" data-feature="calendar">Calendar</a>
+          <a href="files.html" data-feature="files" class="active">Files</a>
+          <a href="settings.html">Settings</a>
+        </nav>
+      </div>
+
+      <div class="topbar-actions">
+        <button id="new-folder-btn" class="secondary">
+          <span class="material-symbols-outlined">create_new_folder</span>
+          New folder
+        </button>
+        <label class="button" for="upload-input">
+          <span class="material-symbols-outlined">upload</span>
+          Upload
+        </label>
+        <input type="file" id="upload-input" multiple hidden />
+        <div class="account-menu">
+          <button type="button" class="account-btn" id="account-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="account-icon material-symbols-outlined">person</span>
+            <span id="account-username">Account</span>
+            <span class="material-symbols-outlined account-caret">expand_more</span>
+          </button>
+          <div class="account-dropdown" id="account-dropdown">
+            <a href="settings.html?tab=account" class="account-dropdown-item">
+              <span class="material-symbols-outlined">manage_accounts</span>
+              Account settings
+            </a>
+            <button type="button" class="account-dropdown-item danger" id="account-sign-out-btn">
+              <span class="material-symbols-outlined">logout</span>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>Locations</h2>
+        </div>
+        <ul id="location-list"></ul>
+        <p id="no-locations-hint" class="empty-state files-empty-state" hidden>
+          No locations configured yet — add one in <a href="settings.html">Settings → Files</a>.
+        </p>
+      </aside>
+
+      <main class="content">
+        <div class="toolbar">
+          <nav class="breadcrumb" id="breadcrumb" aria-label="Current folder"></nav>
+          <span id="result-count"></span>
+        </div>
+
+        <table class="file-table" id="file-list" hidden>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Size</th>
+              <th>Modified</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="file-rows"></tbody>
+        </table>
+
+        <p id="empty-state" class="empty-state" hidden>This folder is empty.</p>
+        <p id="select-location-state" class="empty-state">Choose a location from the sidebar to start browsing.</p>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="mkdir-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mkdir-heading">
+        <h2 id="mkdir-heading">New folder</h2>
+        <form id="mkdir-form">
+          <label>
+            Folder name
+            <input type="text" id="mkdir-name-input" required autofocus />
+          </label>
+          <p class="modal-error" id="mkdir-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="mkdir-cancel-btn" class="secondary">Cancel</button>
+            <button type="submit">Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="rename-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rename-heading">
+        <h2 id="rename-heading">Rename</h2>
+        <form id="rename-form">
+          <label>
+            New name
+            <input type="text" id="rename-name-input" required autofocus />
+          </label>
+          <p class="modal-error" id="rename-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="rename-cancel-btn" class="secondary">Cancel</button>
+            <button type="submit">Rename</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="auth.js" data-next="files.js"></script>
+</body>
+</html>

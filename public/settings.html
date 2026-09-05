@@ -20,12 +20,19 @@
           <h1>SyncMark</h1>
         </a>
         <nav class="nav">
-          <a href="index.html">Bookmarks</a>
-          <a href="contacts.html">Contacts</a>
-          <a href="calendar.html">Calendar</a>
+          <a href="index.html" data-feature="bookmarks">Bookmarks</a>
+          <a href="contacts.html" data-feature="contacts">Contacts</a>
+          <a href="calendar.html" data-feature="calendar">Calendar</a>
+          <a href="files.html" data-feature="files">Files</a>
           <a href="settings.html" class="active">Settings</a>
         </nav>
       </div>
+
+      <div class="topbar-search">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="search" id="search-input" placeholder="Search settings…" />
+      </div>
+
       <div class="topbar-actions">
         <div class="account-menu">
           <button type="button" class="account-btn" id="account-menu-trigger" aria-haspopup="true" aria-expanded="false">
@@ -34,7 +41,7 @@
             <span class="material-symbols-outlined account-caret">expand_more</span>
           </button>
           <div class="account-dropdown" id="account-dropdown">
-            <a href="account.html" class="account-dropdown-item">
+            <a href="settings.html?tab=account" class="account-dropdown-item">
               <span class="material-symbols-outlined">manage_accounts</span>
               Account settings
             </a>
@@ -49,6 +56,72 @@
 
     <div class="layout">
       <main class="content settings-page">
+        <div class="settings-tabs" role="tablist">
+          <button type="button" class="settings-tab" data-tab="account" role="tab" aria-selected="false">Account</button>
+          <button type="button" class="settings-tab active" data-tab="general" role="tab" aria-selected="true">General</button>
+          <button type="button" class="settings-tab" data-tab="bookmarks" role="tab" aria-selected="false">Bookmarks</button>
+          <button type="button" class="settings-tab" data-tab="files" role="tab" aria-selected="false">Files</button>
+          <button type="button" class="settings-tab" data-tab="contacts" role="tab" aria-selected="false">Contacts</button>
+          <button type="button" class="settings-tab" data-tab="calendar" role="tab" aria-selected="false">Calendar</button>
+          <button type="button" class="settings-tab" data-tab="backup" role="tab" aria-selected="false">Backup</button>
+        </div>
+        <p class="empty-state" id="settings-search-empty" hidden>No settings found for that search.</p>
+
+        <div class="settings-tab-panel" data-tab-panel="account" hidden>
+        <section class="settings-section">
+          <h2>Profile picture</h2>
+          <p class="settings-hint">Shown next to your name in the top bar. PNG, JPEG, GIF, or WebP — up to 2&nbsp;MB.</p>
+          <div class="avatar-editor">
+            <div class="avatar-preview" id="avatar-preview">
+              <span class="material-symbols-outlined">person</span>
+            </div>
+            <div class="avatar-actions">
+              <label class="button secondary" for="avatar-file">Upload picture</label>
+              <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+              <button type="button" id="avatar-remove-btn" class="secondary" hidden>Remove</button>
+            </div>
+          </div>
+          <p class="modal-error" id="avatar-error" hidden></p>
+        </section>
+
+        <section class="settings-section">
+          <h2>Change username</h2>
+          <form id="username-form" class="account-form">
+            <label>
+              New username
+              <input type="text" id="new-username-input" required autocomplete="username" />
+            </label>
+            <label>
+              Current password
+              <input type="password" id="username-current-password" required autocomplete="current-password" />
+            </label>
+            <p class="modal-error" id="username-error" hidden></p>
+            <button type="submit" class="button">Save username</button>
+          </form>
+        </section>
+
+        <section class="settings-section">
+          <h2>Change password</h2>
+          <form id="password-form" class="account-form">
+            <label>
+              Current password
+              <input type="password" id="password-current-input" required autocomplete="current-password" />
+            </label>
+            <label>
+              New password
+              <input type="password" id="password-new-input" required minlength="8" autocomplete="new-password" />
+            </label>
+            <label>
+              Confirm new password
+              <input type="password" id="password-confirm-input" required autocomplete="new-password" />
+            </label>
+            <p class="modal-error" id="password-error" hidden></p>
+            <button type="submit" class="button">Save password</button>
+          </form>
+        </section>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="general">
         <section class="settings-section">
           <h2>How to use SyncMark</h2>
           <p class="settings-hint">A quick tour, plus step-by-step setup for syncing your contacts and calendar to a phone or computer.</p>
@@ -108,6 +181,30 @@
         </section>
 
         <section class="settings-section">
+          <h2>Features</h2>
+          <p class="settings-hint">Turn tabs on or off — a disabled feature's nav link is hidden here and its API and sync (CardDAV/CalDAV) routes stop responding too, not just its page. At least one must stay on.</p>
+          <div class="feature-toggle-group">
+            <button type="button" class="feature-toggle-btn" id="feature-bookmarks-toggle" aria-pressed="false">
+              <span class="material-symbols-outlined">bookmark</span>
+              Bookmarks
+            </button>
+            <button type="button" class="feature-toggle-btn" id="feature-contacts-toggle" aria-pressed="false">
+              <span class="material-symbols-outlined">contacts</span>
+              Contacts (+ CardDAV sync)
+            </button>
+            <button type="button" class="feature-toggle-btn" id="feature-calendar-toggle" aria-pressed="false">
+              <span class="material-symbols-outlined">calendar_month</span>
+              Calendar (+ CalDAV sync)
+            </button>
+            <button type="button" class="feature-toggle-btn" id="feature-files-toggle" aria-pressed="false">
+              <span class="material-symbols-outlined">folder</span>
+              Files (browse/upload files on this server)
+            </button>
+          </div>
+          <p class="modal-error" id="feature-error" hidden></p>
+        </section>
+
+        <section class="settings-section">
           <h2>Appearance</h2>
           <div class="settings-row">
             <label for="theme-select">Theme</label>
@@ -146,6 +243,30 @@
         </section>
 
         <section class="settings-section">
+          <h2>Danger zone</h2>
+          <div class="settings-row">
+            <div>
+              <p class="settings-hint">Permanently remove every bookmark from this SyncMark instance. This cannot be undone.</p>
+            </div>
+            <button id="clear-all-btn" class="danger">Clear all bookmarks</button>
+          </div>
+          <div class="settings-row">
+            <div>
+              <p class="settings-hint">Delete your account and everything in it — all bookmarks, folders, and settings. You'll be returned to the initial setup screen. This cannot be undone.</p>
+            </div>
+            <button id="delete-account-btn" class="danger">Delete account</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>About</h2>
+          <p class="settings-hint">SyncMark is a self-hosted personal server: bookmarks, contacts, a calendar, and a file manager, each optional and toggle-able above.</p>
+          <p class="settings-hint">Keyboard shortcuts (on the Bookmarks page): <code>/</code> to search, <code>n</code> to add a bookmark, <code>Esc</code> to close dialogs.</p>
+        </section>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="bookmarks" hidden>
+        <section class="settings-section">
           <h2>Import bookmarks</h2>
           <p class="settings-hint">Import bookmarks from a browser export — a Netscape-format HTML file, or a JSON export (Chrome's <code>Bookmarks</code> file, Firefox's JSON backup, or a plain <code>{title, url}[]</code> array). Folder structure is preserved.</p>
           <div class="settings-row">
@@ -174,19 +295,42 @@
               <span class="stat-value" id="stat-folders">–</span>
               <span class="stat-label">Folders</span>
             </div>
-            <div class="stat-tile">
-              <span class="stat-value" id="stat-contacts">–</span>
-              <span class="stat-label">Contacts</span>
-            </div>
-            <div class="stat-tile">
-              <span class="stat-value" id="stat-events">–</span>
-              <span class="stat-label">Events</span>
-            </div>
           </div>
+        </section>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="files" hidden>
+        <section class="settings-section">
+          <h2>File locations</h2>
+          <p class="settings-hint">Each location is a named, strictly sandboxed folder on this server — the Files tab can browse, upload to, and delete within it, but never outside it. Removing a location here only un-registers it; nothing on disk is touched.</p>
+          <ul class="folders-manage-list" id="locations-manage-list"></ul>
+          <p class="folders-manage-empty" id="locations-empty-hint" hidden>No locations configured yet.</p>
+          <form id="new-location-form" class="new-location-form">
+            <input type="text" id="new-location-name" placeholder="Name (e.g. Documents)" required />
+            <input type="text" id="new-location-path" placeholder="Absolute server path" required />
+            <button type="button" id="browse-server-btn" class="secondary">
+              <span class="material-symbols-outlined">folder_open</span>
+              Browse…
+            </button>
+            <button type="submit">Add</button>
+          </form>
+          <p class="modal-error" id="location-error" hidden></p>
         </section>
 
         <section class="settings-section">
-          <h2>Contacts</h2>
+          <h2>Library</h2>
+          <div class="settings-stats">
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-locations">–</span>
+              <span class="stat-label">Locations</span>
+            </div>
+          </div>
+        </section>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="contacts" hidden>
+        <section class="settings-section">
+          <h2>Import / export</h2>
           <p class="settings-hint">Import contacts from a <code>.vcf</code> (vCard) or <code>.csv</code> file, or export every contact as either for backup/portability.</p>
           <div class="settings-row">
             <label class="button secondary" for="import-contacts-file-settings">Choose file to import</label>
@@ -219,7 +363,19 @@
         </section>
 
         <section class="settings-section">
-          <h2>Calendar</h2>
+          <h2>Library</h2>
+          <div class="settings-stats">
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-contacts">–</span>
+              <span class="stat-label">Contacts</span>
+            </div>
+          </div>
+        </section>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="calendar" hidden>
+        <section class="settings-section">
+          <h2>Import / export</h2>
           <p class="settings-hint">Import events from an <code>.ics</code> (iCalendar) file, or export the whole calendar as one for backup/portability.</p>
           <div class="settings-row">
             <label class="button secondary" for="import-events-file">Import .ics file</label>
@@ -233,7 +389,7 @@
         <section class="settings-section">
           <h2>Calendar sync (CalDAV)</h2>
           <p class="settings-hint">
-            Uses the <strong>same server address as Contacts sync above</strong> — one address and one login drive
+            Uses the <strong>same server address as Contacts sync</strong> — one address and one login drive
             both. Point your phone's Calendar app at it to sync SyncMark events in both directions.
           </p>
           <p class="settings-hint">
@@ -245,26 +401,59 @@
         </section>
 
         <section class="settings-section">
-          <h2>Danger zone</h2>
-          <div class="settings-row">
-            <div>
-              <p class="settings-hint">Permanently remove every bookmark from this SyncMark instance. This cannot be undone.</p>
+          <h2>Library</h2>
+          <div class="settings-stats">
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-events">–</span>
+              <span class="stat-label">Events</span>
             </div>
-            <button id="clear-all-btn" class="danger">Clear all bookmarks</button>
+          </div>
+        </section>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="backup" hidden>
+        <section class="settings-section">
+          <h2>Automatic backups</h2>
+          <p class="settings-hint">
+            A backup is a full snapshot of everything in this SyncMark instance — bookmarks, contacts, calendar,
+            file locations, and settings. Point the directory below at a synced cloud folder (rclone, Dropbox,
+            OneDrive, a network share) to get real off-machine copies; left blank, backups are kept in
+            <code>data/backups</code> on this server.
+          </p>
+          <label class="modal-checkbox">
+            <input type="checkbox" id="backup-enabled-toggle" />
+            Back up automatically
+          </label>
+          <div class="settings-row">
+            <label for="backup-frequency-select">Frequency</label>
+            <select id="backup-frequency-select">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
           </div>
           <div class="settings-row">
+            <label for="backup-retention-input">Keep this many backups</label>
+            <input type="number" id="backup-retention-input" min="1" max="100" style="max-width: 100px" />
+          </div>
+          <div class="settings-row">
+            <label for="backup-dir-input">Backup directory (optional)</label>
+            <input type="text" id="backup-dir-input" placeholder="Default: data/backups" />
+          </div>
+          <p class="modal-error" id="backup-schedule-error" hidden></p>
+          <div class="settings-row">
             <div>
-              <p class="settings-hint">Delete your account and everything in it — all bookmarks, folders, and settings. You'll be returned to the initial setup screen. This cannot be undone.</p>
+              <p class="settings-hint">Create a backup right now, using the settings above.</p>
             </div>
-            <button id="delete-account-btn" class="danger">Delete account</button>
+            <button type="button" id="backup-run-now-btn" class="secondary">Back up now</button>
           </div>
         </section>
 
         <section class="settings-section">
-          <h2>About</h2>
-          <p class="settings-hint">SyncMark is a self-hosted bookmark manager. Import bookmark exports from your browser, then browse, search, edit, and remove them here.</p>
-          <p class="settings-hint">Keyboard shortcuts (on the Bookmarks page): <code>/</code> to search, <code>n</code> to add a bookmark, <code>Esc</code> to close dialogs.</p>
+          <h2>Restore points</h2>
+          <ul class="folders-manage-list" id="backups-list"></ul>
+          <p class="folders-manage-empty" id="backups-empty-hint" hidden>No backups yet.</p>
         </section>
+        </div>
 
         <p class="settings-signature">- niruxxdaboi -</p>
       </main>
@@ -283,6 +472,41 @@
           <div class="modal-actions">
             <button type="button" id="delete-account-cancel" class="secondary">Cancel</button>
             <button type="submit" id="delete-account-confirm" class="danger">Delete everything</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="browse-server-modal">
+      <div class="modal browse-server-modal" role="dialog" aria-modal="true" aria-labelledby="browse-server-heading">
+        <h2 id="browse-server-heading">Choose a folder on the server</h2>
+        <p class="browse-server-path" id="browse-server-current-path"></p>
+        <ul class="browse-server-list" id="browse-server-list"></ul>
+        <p class="modal-error" id="browse-server-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" id="browse-server-up-btn" class="secondary">
+            <span class="material-symbols-outlined">arrow_upward</span>
+            Up
+          </button>
+          <button type="button" id="browse-server-cancel-btn" class="secondary">Cancel</button>
+          <button type="button" id="browse-server-select-btn">Select this folder</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="restore-backup-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restore-backup-heading">
+        <h2 id="restore-backup-heading">Restore backup</h2>
+        <p class="settings-hint" id="restore-backup-subtitle">This replaces everything currently in SyncMark with the contents of this backup. There is no undo. Enter your password to confirm.</p>
+        <form id="restore-backup-form">
+          <label>
+            Password
+            <input type="password" id="restore-backup-password" required autocomplete="current-password" />
+          </label>
+          <p class="modal-error" id="restore-backup-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="restore-backup-cancel" class="secondary">Cancel</button>
+            <button type="submit" id="restore-backup-confirm" class="danger">Restore</button>
           </div>
         </form>
       </div>

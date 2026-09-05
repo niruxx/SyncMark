@@ -1,7 +1,8 @@
 const express = require('express');
 const cheerio = require('cheerio');
-const { statements, currentContactsSeq, deleteContactById, upsertContactFromVCard } = require('../db');
+const { statements, isFeatureEnabled, currentContactsSeq, deleteContactById, upsertContactFromVCard } = require('../db');
 const { basicAuth } = require('../middleware/basicAuth');
+const { requireFeatureDav } = require('../middleware/featureGate');
 const { buildVCard, parseVCard } = require('../utils/vcard');
 
 const router = express.Router();
@@ -19,6 +20,11 @@ router.get('/.well-known/carddav', (req, res) => res.redirect(301, '/dav/'));
 // Scoped to /dav — otherwise this gates every request to the whole app (the
 // browser's native Basic-Auth prompt instead of the SyncMark sign-in page).
 router.use('/dav', basicAuth);
+
+// Hard-blocks the address book itself when Contacts is turned off in
+// Settings — the shared principal handler below separately stops
+// *advertising* it, so a disabled feature isn't even discoverable.
+router.use('/dav/addressbooks', requireFeatureDav('contacts'));
 
 // ---------- helpers ----------
 
@@ -133,13 +139,19 @@ router.propfind(['/dav', '/dav/'], (req, res) => {
 router.propfind(['/dav/principals/:username', '/dav/principals/:username/'], (req, res) => {
   if (!requireOwnUser(req, res)) return;
   const { username } = req.davUser;
-  const props =
+  let props =
     '<d:resourcetype><d:principal/></d:resourcetype>' +
     `<d:displayname>${xmlEscape(username)}</d:displayname>` +
     `<d:current-user-principal><d:href>${xmlEscape(principalHref(username))}</d:href></d:current-user-principal>` +
-    `<d:principal-URL><d:href>${xmlEscape(principalHref(username))}</d:href></d:principal-URL>` +
-    `<card:addressbook-home-set><d:href>${xmlEscape(homeHref(username))}</d:href></card:addressbook-home-set>` +
-    `<cal:calendar-home-set><d:href>${xmlEscape(calendarHomeHref(username))}</d:href></cal:calendar-home-set>`;
+    `<d:principal-URL><d:href>${xmlEscape(principalHref(username))}</d:href></d:principal-URL>`;
+  // A disabled feature isn't just blocked below — it's not advertised here
+  // either, so a DAV client never discovers a collection it can't use.
+  if (isFeatureEnabled('contacts')) {
+    props += `<card:addressbook-home-set><d:href>${xmlEscape(homeHref(username))}</d:href></card:addressbook-home-set>`;
+  }
+  if (isFeatureEnabled('calendar')) {
+    props += `<cal:calendar-home-set><d:href>${xmlEscape(calendarHomeHref(username))}</d:href></cal:calendar-home-set>`;
+  }
   sendMultiStatus(res, xmlResponse(principalHref(username), props));
 });
 

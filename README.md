@@ -16,6 +16,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - [Browser extensions](#browser-extensions)
 - [Contacts & CardDAV sync](#contacts--carddav-sync)
 - [Calendar & CalDAV sync](#calendar--caldav-sync)
+- [File Manager](#file-manager)
 - [API](#api)
 
 ## Features
@@ -23,7 +24,8 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - Material Design 3 interface in the Google Photos idiom: tonal surfaces, pill-shaped nav and buttons, a prominent rounded search bar in the app bar, Material Symbols icons, elevation instead of borders, and Roboto throughout — plus deliberately-paced animated transitions between pages (via the CSS View Transitions API where supported, with an equivalent hand-rolled fade for browsers without it, e.g. Firefox)
 - Light and dark themes, both built on the same Material tonal palette (light by default; switch in Settings → Appearance)
 - A subtle, slow-drifting animated gradient behind the app (off automatically for anyone with reduced-motion preferences set) — only ever shown once you're signed in, never behind the sign-in/register screen
-- **A dedicated sign-in/register page on first run**: the first person to open SyncMark lands on a clean, standalone welcome page to create a username and password (not a dialog over a half-loaded app); after that, every visit opens the same page to sign in before anything else loads
+- **A dedicated sign-in/register page on first run**: the first person to open SyncMark lands on a clean, standalone welcome page — a two-step wizard (username/password, then which of Bookmarks/Contacts/Calendar to turn on) rather than a dialog over a half-loaded app; after that, every visit opens a plain sign-in page before anything else loads. No email/SMTP involved anywhere — see [Resetting a forgotten password](#resetting-a-forgotten-password) for the CLI-based recovery path instead
+- **Feature toggles** (Settings → General, also set during first-run): turn Bookmarks/Contacts/Calendar/Files on or off — disabling one hard-blocks its API and CardDAV/CalDAV routes, not just its nav tab — see [Feature toggles](#feature-toggles)
 - Click the "SyncMark" title in the top left from anywhere to jump back to your bookmarks
 - Configurable session length (Settings → Session): stay signed in for 5 minutes, 1 hour, 30 days, or permanently (never asked again) — applies the next time you sign in
 - Account menu (top right, click your name): jump to account settings or sign out from anywhere in one click, no need to dig into Settings first
@@ -46,9 +48,12 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - Firefox and Chrome toolbar extensions (`extensions/`) for quick access without opening a tab
 - **Contacts tab** with its own add/edit/delete UI (name, phone numbers, emails, organization, notes, favorite, photo) plus a built-in **CardDAV server** so contacts stay in sync with your phone's native contacts app — see [Contacts & CardDAV sync](#contacts--carddav-sync)
 - Contacts: import/export `.vcf` (vCard) or `.csv` files, multi-select with a bulk-action bar (favorite/unfavorite/export/delete selected), sort by name or date added
+- Contacts: fuzzy search (name/org/title/phone/email/tags), a unified read-only Contact Card, Markdown notes, addresses/social profiles/messaging handles/custom fields/key dates, relationships linked to other contacts, and tags + drag-and-drop manual or rule-based smart groups — see [Fuzzy search, unified cards, tags & groups](#fuzzy-search-unified-cards-tags--groups)
 - **Calendar tab** with a full month-grid view, basic recurring events (daily/weekly/monthly, with an optional end date), and a built-in **CalDAV server** so events sync with your phone's native calendar app — the same server address and login as Contacts sync — see [Calendar & CalDAV sync](#calendar--caldav-sync)
 - Calendar: click a date to open that day's events in a side panel (the month grid shrinks to make room); right-click a date or an event for a quick Add/Edit/Remove menu; import/export `.ics` (iCalendar) files
 - Settings → **How to use SyncMark**: an in-app quick tour plus step-by-step CardDAV/CalDAV sync setup for iOS, Android, Linux, and Windows
+- **File Manager tab** (off by default — turn it on in Settings → General) — browse, upload, download, rename, and delete files under one or more admin-configured, strictly sandboxed server folders ("locations") — see [File Manager](#file-manager)
+- **Tabbed Settings**: General / Bookmarks / Files / Contacts / Calendar, each with only the import/export, sync, and stats controls relevant to it, instead of one long scrolling page
 
 ## Screenshots
 
@@ -70,7 +75,7 @@ npm install
 npm start
 ```
 
-Open `http://localhost:3000` and follow the on-screen setup to create your account. That's the whole install — there's no build step, no separate frontend to compile.
+Open `http://localhost:3000` and follow the on-screen setup — a short two-step wizard: your username and password, then which tabs to turn on (Bookmarks/Contacts/Calendar default on, Files defaults off since it reads/writes the server filesystem — all changeable later in Settings → General → Features). That's the whole install — there's no build step, no separate frontend to compile.
 
 `npm install` builds the `better-sqlite3` native module for your platform. If it prompts about install scripts (`npm warn allow-scripts …`), that's expected the first time on a new machine/OS — approve it with:
 
@@ -212,6 +217,34 @@ Everything is configured through environment variables at the process level, or 
 | Session length | Settings → Session | `5m` / `hourly` / `monthly` / `permanent`; stored server-side, applies to your *next* sign-in |
 | Account (username/password) | Account page (top right) | requires your current password to change |
 | Profile picture | Account page (top right) | stored in the database, so it survives updates and follows you to any browser |
+| Feature toggles | Settings → General → Features | Bookmarks/Contacts/Calendar on by default, Files off by default — see [Feature toggles](#feature-toggles) below |
+| File locations | Settings → Files | name + absolute server path per location — see [File Manager](#file-manager) below |
+
+### Resetting a forgotten password
+
+SyncMark has no email/SMTP integration and no public "forgot password" form by design — that would be an attack surface for an app that otherwise has none. Instead, an operator with shell access to the server (which is the only way anyone should be able to reset it, since SyncMark protects one account for the whole instance) runs:
+
+```bash
+npm run reset-password -- yourNewPassword123
+```
+
+or, to be prompted instead of putting the password on the command line (and in your shell history):
+
+```bash
+npm run reset-password
+```
+
+The prompt does **not** mask input, so only run it somewhere private. Either way it updates the account in `data/bookmarks.sqlite3` directly and signs every device out (`DELETE FROM sessions`), which is the sensible default whether you forgot the password or are resetting it because of a suspected compromise. It refuses to do anything if no account exists yet (nothing to reset — run first-run setup instead) or the new password is under 8 characters.
+
+### Feature toggles
+
+Settings → General → Features lets you turn Bookmarks, Contacts, Calendar, and Files on or off independently (at least one must stay on) — also asked up front during the first-run wizard. Turning one off is a **hard** block, not just a hidden tab:
+
+- Its `/api/*` routes start returning `403`.
+- Its CardDAV/CalDAV routes (`/dav/addressbooks/...` for Contacts, `/dav/calendars/...` for Calendar) start returning `403` too.
+- It stops being *advertised* during CardDAV/CalDAV discovery — a PROPFIND on the principal no longer lists a disabled feature's home-set at all, so a phone/desktop client won't even offer to sync it.
+
+Existing installs that predate a given toggle keep working exactly as before — a never-set flag defaults to *enabled* for Bookmarks/Contacts/Calendar, so nothing already in use is silently turned off by an update. **Files is the one exception**: it defaults to *disabled*, since it never existed before and is the only feature that reads/writes the host filesystem directly rather than just app data — turning it on is meant to be a deliberate choice, not an update side effect.
 
 ### Data & backups
 
@@ -254,9 +287,18 @@ A contact added, edited, or deleted on your phone syncs back to SyncMark (and to
 
 **How it works**: CardDAV clients authenticate with the same username/password as the web UI, over HTTP Basic Auth (not the session cookie) — there's no separate sync password to manage. The server implements the minimal subset of RFC 6352 that real clients need: principal/address-book discovery, `GET`/`PUT`/`DELETE` on individual vCards, and `REPORT` (`addressbook-multiget`, `addressbook-query`, and incremental `sync-collection`) on the single address book every account gets (`SyncMark Contacts`).
 
-**Known limitation**: only the fields SyncMark's UI models — name, organization, phone numbers, emails, notes, favorite, photo — round-trip. A vCard property outside that set (postal address, birthday, IM handles, etc.) added on a phone is silently dropped the moment that contact syncs to SyncMark; it isn't stored, so it won't come back on a later sync either.
+**Known limitation**: name, organization, title, phone numbers, emails, addresses, a birthday (from Key dates), social profiles, tags, notes, favorite, and photo all round-trip via vCard (`TITLE`, `ADR`, `BDAY`, `X-SOCIALPROFILE`, `CATEGORIES`). Messaging handles, custom fields, non-birthday key dates, and relationships have no vCard equivalent and are SyncMark-only — a vCard property outside the modeled set, from either side, is silently dropped rather than stored, so it won't reappear on a later sync.
 
-**Manual import/export**: Settings → Contacts (and the Contacts page toolbar) lets you import a `.vcf` (vCard) or `.csv` file, or export every contact as either — useful for one-off transfers or backups outside of CardDAV. CSV import accepts SyncMark's own export format (`First Name, Last Name, Organization, Phones, Emails, Notes, Favorite`, with multiple phones/emails packed into one cell as `type:value; type:value`) plus a few common alternate headers from other address books (`Given Name`/`Family Name`, `Company`, a plain `Name` column, etc.). The Contacts page itself also supports multi-select (checkboxes + "select all") with a bulk-action bar to favorite, unfavorite, export, or delete several contacts at once, and "Export selected" for just the checked ones.
+**Manual import/export**: Settings → Contacts (and the Contacts page toolbar) lets you import a `.vcf` (vCard) or `.csv` file, or export every contact as either — useful for one-off transfers or backups outside of CardDAV. CSV import accepts SyncMark's own export format (`First Name, Last Name, Organization, Phones, Emails, Notes, Favorite`, with multiple phones/emails packed into one cell as `type:value; type:value`) plus a few common alternate headers from other address books (`Given Name`/`Family Name`, `Company`, a plain `Name` column, etc.); it does not carry the newer fields below (title, tags, addresses, social/messaging, custom fields, key dates, relationships) — those are vCard/JSON-only for now. The Contacts page itself also supports multi-select (checkboxes + "select all") with a bulk-action bar to favorite, unfavorite, export, or delete several contacts at once, and "Export selected" for just the checked ones.
+
+### Fuzzy search, unified cards, tags & groups
+
+- **Fuzzy search** — the search bar matches name, organization, title, phone numbers, emails, and tags all at once, tolerating typos and partial/out-of-order matches (a lightweight, dependency-free subsequence matcher, not a full search engine — plenty for a personal address book).
+- **Unified Contact Card** — clicking a contact opens a single read-only view merging every phone, email, address, social profile, messaging handle, key date, custom field, relationship, and note into one place; an **Edit** button from there opens the full editor.
+- **Notes are Markdown** — `**bold**`, `*italic*`, `` `code` ``, `[text](url)` (http(s)/mailto links only), and `- ` bullet lists, with a Preview toggle in the editor. Rendered client-side by escaping the text first and only then applying formatting, so there's never a way for a note's content to inject markup.
+- **Relationships** link to another real contact in your address book (e.g. "Manager: Jane Doe") rather than a free-text name — click through to jump to theirs, and deleting a linked contact automatically removes the relationship entries that pointed at it elsewhere.
+- **Tags** are free-form labels on a contact (autocompleted from tags you've already used) and show as small pills on the row and card.
+- **Groups** (sidebar, "Manage groups") are either **manual** — drag a contact from the table onto a group to add it — or **smart**, matching contacts automatically against a small set of AND-ed rules (tag equals, organization/title contains, favorite is, added within N days) — e.g. a "Clients added this month" group is `tag equals Client` + `added within 30 days`.
 
 ## Calendar & CalDAV sync
 
@@ -275,6 +317,18 @@ The **Calendar** tab works the same way, for events instead of contacts: a full 
 
 **Manual import/export**: Settings → Calendar lets you import an `.ics` file (one or many events) or export the whole calendar as one.
 
+## File Manager
+
+The **Files** tab is a personal file browser for the server itself — off by default (see [Feature toggles](#feature-toggles)), since it's the one feature that reads and writes the host filesystem directly.
+
+**Setup**: Settings → Files → add a **location** — a name plus an absolute path on the server (e.g. `/srv/media` or `C:\Users\me\Documents`). The path must already exist and be a directory. Add as many as you like; each shows up as its own entry in the Files tab's sidebar.
+
+**Sandboxing**: every location is a hard boundary. Browsing, uploading, downloading, renaming, and deleting can never reach outside the configured path — no `..` traversal, no absolute-path injection, and (best-effort) no escaping through a symlink placed inside the location either. Removing a location in Settings only un-registers it; nothing on disk is touched.
+
+**Using it**: double-click a folder to open it, click a file's Download button (or double-click it) to download, and right-click anything — a file, a folder, or empty space in the list — for a quick Add/Rename/Delete/Download menu. "New folder" and "Upload" (multiple files at once) are in the top bar. Uploads stream straight to disk rather than buffering in memory, and — unlike the 2 MB/25 MB caps on avatars and bookmark/contact/calendar imports elsewhere in the app — there's no file-size limit; disk space is the natural ceiling for a personal file server.
+
+**Known limitations**: no in-browser text/image preview or editing (download to view), no move-between-locations or bulk multi-select yet, and no archive (.zip) download for a whole folder at once.
+
 ## API
 
 All `/api/*` routes below except the `/api/auth/*` ones require a valid session cookie (401 otherwise). Static files (the HTML/CSS/JS themselves) are always public — they're what render the sign-in screen. The CardDAV server at `/dav/` (and the `/.well-known/carddav` redirect to it) is separate from `/api` and uses HTTP Basic Auth instead of the session cookie — see [Contacts & CardDAV sync](#contacts--carddav-sync).
@@ -282,7 +336,7 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | Method | Path                  | Description                                       |
 | ------ | --------------------- | -------------------------------------------------- |
 | GET    | `/api/auth/status`    | `{ setupRequired, authenticated }`                   |
-| POST   | `/api/auth/setup`     | First-run only: create the account (`{ username, password }`), signs you in |
+| POST   | `/api/auth/setup`     | First-run only: create the account (`{ username, password, features? }`), signs you in — `features` defaults every key not given |
 | POST   | `/api/auth/login`     | `{ username, password }`                             |
 | POST   | `/api/auth/logout`    | Clear the current session                            |
 | GET/PUT | `/api/auth/settings` | Get/set the session-duration preference (`{ sessionDuration: "5m"\|"hourly"\|"monthly"\|"permanent" }`) — requires auth |
@@ -308,7 +362,8 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | DELETE | `/api/folders`        | Delete a folder (`{ name }`); its bookmarks become unfiled |
 | PUT    | `/api/folders/reorder`| Set a folder's sidebar position between siblings (`{ name, beforeName, afterName }`) |
 | GET    | `/api/stats`          | Total bookmark, folder, contact, and event counts     |
-| GET    | `/api/contacts`       | List contacts (`?q=` search over name/org/phone/email, `?favorite=1` favorites only, `?sort=name-asc\|name-desc\|created-asc\|created-desc`) |
+| GET    | `/api/contacts`       | List contacts — with `?q=`, fuzzy-ranked over name/org/title/phone/email/tags; without it, `?sort=name-asc\|name-desc\|created-asc\|created-desc`; `?favorite=1` and `?tag=<name>` filter either way |
+| GET    | `/api/contacts/tags`  | Distinct tags across all contacts, for the tag input's autocomplete |
 | POST   | `/api/contacts`       | Add a contact (`firstName`, `lastName`, `organization`, `phones[]`, `emails[]`, `notes`, `favorite`) |
 | GET    | `/api/contacts/export` | Download every contact (or `?ids=1,2,3` for a selection) as one `.vcf` file, or `.csv` with `?format=csv` |
 | POST   | `/api/contacts/import` | Upload a `.vcf` or `.csv` file (multipart, field `file`) — format is sniffed from the filename/content, one or many contacts |
@@ -321,6 +376,13 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | GET    | `/api/contacts/:id/photo` | The contact's photo bytes (404 if none set)      |
 | POST   | `/api/contacts/:id/photo` | Upload a contact photo (multipart, field `photo`; PNG/JPEG/GIF/WebP, ≤ 2 MB) |
 | DELETE | `/api/contacts/:id/photo` | Remove a contact's photo                         |
+| GET    | `/api/contact-groups` | List groups (`{ id, name, type: "manual"\|"smart", smart_rules, position }[]`) |
+| POST   | `/api/contact-groups` | Add a group (`{ name, type, smartRules? }`) — `smartRules` is `[{ field, operator, value }]`, AND-ed |
+| PUT    | `/api/contact-groups/:id` | Rename, or update a smart group's rules (a group's `type` can't change after creation) |
+| PUT    | `/api/contact-groups/reorder` | Reorder the sidebar (`{ id, beforeId?, afterId? }`) |
+| DELETE | `/api/contact-groups/:id` | Delete a group (members/rules only — contacts are untouched) |
+| POST/DELETE | `/api/contact-groups/:id/members/:contactId` | Add/remove a contact from a **manual** group |
+| GET    | `/api/contact-groups/:id/contacts` | Resolve a group's members — manual membership, or every contact matching a smart group's rules |
 | GET    | `/api/events`         | List events (`?q=` search over title/location/description) — recurrence is returned as a raw `RRULE`, not expanded |
 | POST   | `/api/events`         | Add an event (`title`, `description`, `location`, `startAt`, `endAt`, `allDay`, `recurrence: { freq: "daily"\|"weekly"\|"monthly", until }`) |
 | GET    | `/api/events/export`  | Download every event as one `.ics` file              |
@@ -329,5 +391,17 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | PUT    | `/api/events/:id`     | Update an event (editing a recurring event updates the whole series) |
 | DELETE | `/api/events/:id`     | Remove an event (deletes the whole series if recurring) |
 | DELETE | `/api/events/all`     | Remove every event                                   |
+| GET    | `/api/features`       | `{ bookmarks, contacts, calendar, files }` — never itself feature-gated |
+| PUT    | `/api/features`       | Update flags (`{ bookmarks?, contacts?, calendar?, files? }`) — 400 if all four would end up off |
+| GET    | `/api/files/locations` | List configured file locations (`{ id, name, path }[]`) |
+| POST   | `/api/files/locations` | Add a location (`{ name, path }`) — `path` must be an absolute, existing directory |
+| PUT    | `/api/files/locations/:id` | Update a location's name/path                    |
+| DELETE | `/api/files/locations/:id` | Un-register a location — never touches anything on disk |
+| GET    | `/api/files/browse`   | List a folder's contents (`?location=<id>&path=<relative>`) — `[{ name, type: "dir"\|"file", size, modifiedAt }]` |
+| GET    | `/api/files/download` | Download a file (`?location=&path=`), streamed          |
+| POST   | `/api/files/upload`   | Upload one or more files (`?location=&path=`, multipart field `files`) — 409 if a name collides unless `&overwrite=1` |
+| POST   | `/api/files/mkdir`    | Create a folder (`{ location, path, name }`)             |
+| PUT    | `/api/files/rename`   | Rename a file or folder in place (`{ location, path, newName }`) |
+| DELETE | `/api/files/item`     | Delete a file, or a folder and everything in it (`?location=&path=`) |
 
 Favicons are rendered client-side via Google's public favicon service (`s2/favicons`), based on each bookmark's domain — no favicon data is stored server-side. Theme and default view preferences are stored in the browser's `localStorage`.

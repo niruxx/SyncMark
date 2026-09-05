@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const multer = require('multer');
-const { statements, wipeDatabase } = require('../db');
+const { statements, wipeDatabase, setFeatureFlags } = require('../db');
 const { hashPassword, verifyPassword } = require('../utils/password');
 const { parseCookies } = require('../utils/cookies');
 const { requireAuth, getSession } = require('../middleware/auth');
@@ -73,8 +73,14 @@ router.post('/auth/setup', (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
+  const features = req.body.features;
+  if (features && !features.bookmarks && !features.contacts && !features.calendar && !features.files) {
+    return res.status(400).json({ error: 'At least one feature must stay enabled' });
+  }
+
   const passwordHash = hashPassword(password);
   const result = statements.insertUser.run({ username, passwordHash });
+  if (features) setFeatureFlags(features);
 
   const { token, ms } = createSession(result.lastInsertRowid);
   setSessionCookie(res, token, ms);

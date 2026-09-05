@@ -1,5 +1,5 @@
 const express = require('express');
-const { statements, listMergedFolders, ensureFolderAncestors, SORT_CLAUSES } = require('../db');
+const { statements, ensureFolderAncestors, SORT_CLAUSES } = require('../db');
 const { normalizeFolderPath } = require('../utils/folderPath');
 const { toNetscapeHtml, toGenericJson } = require('../utils/exportBookmarks');
 
@@ -20,13 +20,6 @@ router.get('/bookmarks', (req, res) => {
     : statements.listBookmarksBySort[sort].all({ ...params, folderPrefix: `${folder}/%` });
 
   res.json(rows);
-});
-
-router.get('/stats', (req, res) => {
-  const { count } = statements.countBookmarks.get();
-  const { count: contactCount } = statements.countContacts.get();
-  const { count: eventCount } = statements.countEvents.get();
-  res.json({ total: count, folderCount: listMergedFolders().length, contactTotal: contactCount, eventTotal: eventCount });
 });
 
 router.get('/export', (req, res) => {

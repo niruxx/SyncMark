@@ -263,6 +263,7 @@ code {
 .topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1rem;
   padding: 0.6rem 1.5rem;
   background: var(--surface-dim);
@@ -518,6 +519,8 @@ button.account-dropdown-item.danger {
 
 .button,
 button {
+  position: relative;
+  overflow: hidden;
   background: var(--primary);
   color: var(--on-primary);
   border: none;
@@ -534,7 +537,19 @@ button {
   justify-content: center;
   gap: 0.5rem;
   transition: box-shadow 0.2s var(--ease), background-color 0.2s var(--ease),
-    filter 0.2s var(--ease), opacity 0.2s var(--ease);
+    filter 0.2s var(--ease), opacity 0.2s var(--ease), transform 0.15s var(--ease);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .button:hover,
+  button:hover {
+    transform: translateY(-1px);
+  }
+
+  .button:active,
+  button:active {
+    transform: scale(0.96);
+  }
 }
 
 .button:hover,
@@ -547,6 +562,42 @@ button:hover {
 button:active {
   box-shadow: none;
   filter: brightness(0.96);
+}
+
+/* Click ripple — ui.js sets --ripple-x/--ripple-y from the click position and
+   toggles .rippling; a plain radial-gradient expand+fade, no library. */
+.button::after,
+button::after {
+  content: '';
+  position: absolute;
+  left: var(--ripple-x, 50%);
+  top: var(--ripple-y, 50%);
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  transform: scale(0);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .button.rippling::after,
+  button.rippling::after {
+    animation: buttonRipple 0.5s var(--ease);
+  }
+}
+
+@keyframes buttonRipple {
+  0% {
+    opacity: 0.25;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(14);
+  }
 }
 
 .button:focus-visible,
@@ -1223,7 +1274,8 @@ button.danger {
   font-weight: 500;
 }
 
-.modal .modal-checkbox {
+.modal .modal-checkbox,
+.auth-card .modal-checkbox {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1232,7 +1284,8 @@ button.danger {
   margin-bottom: 1rem;
 }
 
-.modal .modal-checkbox input[type='checkbox'] {
+.modal .modal-checkbox input[type='checkbox'],
+.auth-card .modal-checkbox input[type='checkbox'] {
   width: 18px;
   height: 18px;
   margin: 0;
@@ -1362,6 +1415,28 @@ button.danger {
   padding: 1.5rem;
   opacity: 1;
   transition: opacity 0.2s var(--ease);
+  overflow: hidden;
+}
+
+/* Ambient wash behind the login/first-run card — always on, unlike the
+   post-login body.bg-animated version, so the very first screen isn't flat. */
+.auth-bg {
+  position: absolute;
+  inset: -10%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 45%),
+    radial-gradient(circle at 80% 30%, color-mix(in srgb, var(--primary) 11%, transparent), transparent 45%),
+    radial-gradient(circle at 50% 90%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 50%);
+  filter: blur(70px);
+  opacity: 0.8;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-bg {
+    animation: bgDrift 26s ease-in-out infinite alternate;
+  }
 }
 
 /* Fallback for browsers without document.startViewTransition (Firefox):
@@ -1379,6 +1454,8 @@ button.danger {
 }
 
 .auth-card {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 420px;
   text-align: center;
@@ -1386,6 +1463,20 @@ button.danger {
   background: var(--surface);
   border-radius: var(--corner-xl);
   box-shadow: var(--elev-2);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-card {
+    animation: authCardIn 0.45s var(--ease-emphasized) both;
+  }
+}
+
+@keyframes authCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
 }
 
 .auth-brand {
@@ -1396,7 +1487,37 @@ button.danger {
   font-weight: 500;
   font-size: 1.1rem;
   color: var(--on-surface-variant);
-  margin-bottom: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.auth-tagline {
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+  margin: 0 0 1.75rem;
+  line-height: 1.5;
+}
+
+.auth-feature-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1rem;
+  margin: 1.75rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.auth-feature-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--on-surface-variant);
+}
+
+.auth-feature-strip .material-symbols-outlined {
+  font-size: 16px;
+  color: var(--primary);
 }
 
 .auth-brand .material-symbols-outlined {
@@ -1453,6 +1574,28 @@ button.danger {
   font-size: 0.9375rem;
 }
 
+.auth-step-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.auth-step-actions .secondary {
+  flex-shrink: 0;
+  width: auto;
+  margin-top: 0.75rem;
+}
+
+.auth-step-actions .auth-submit {
+  flex: 1;
+}
+
+.lock-footnote {
+  margin: 1.5rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--on-surface-variant);
+}
+
 /* ---------- Toasts (Material snackbars) ---------- */
 
 .toast-container {
@@ -1499,6 +1642,63 @@ button.danger {
 .settings-page {
   max-width: 720px;
   margin: 0 auto;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+  padding: 0.3rem;
+  background: var(--surface-container);
+  border-radius: var(--corner-full);
+}
+
+.settings-tab {
+  flex: 1;
+  background: transparent;
+  color: var(--on-surface-variant);
+  padding: 0.55rem 1rem;
+  border-radius: var(--corner-full);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.settings-tab:hover {
+  background: var(--surface-container-high);
+  box-shadow: none;
+  filter: none;
+}
+
+.settings-tab.active {
+  background: var(--surface);
+  color: var(--on-surface);
+  box-shadow: var(--elev-1);
+}
+
+.settings-tab-panel {
+  animation: revealDown 0.18s var(--ease) both;
+}
+
+.new-location-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+
+.new-location-form input {
+  flex: 1;
+  min-width: 160px;
+  margin-top: 0;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--on-surface);
+  font-family: inherit;
+  font-size: 0.875rem;
 }
 
 .settings-section {
@@ -1973,6 +2173,393 @@ button.danger {
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 
+.contact-modal-scroll {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* Multi-field dynamic rows (addresses, custom fields, key dates,
+   relationships) — a wider sibling of .contact-field-row for rows with more
+   than one text input alongside the type/label select. */
+.contact-multi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.contact-multi-row select,
+.contact-multi-row input {
+  flex: 1 1 110px;
+  min-width: 90px;
+  margin-top: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--on-surface);
+  font-family: inherit;
+  font-size: 0.8125rem;
+}
+
+.contact-multi-row select:focus,
+.contact-multi-row input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+/* Tags */
+
+.tag-input-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border: 1px solid var(--outline);
+  border-radius: var(--corner-xs);
+}
+
+.tag-input-wrap input {
+  flex: 1;
+  min-width: 120px;
+  margin: 0 !important;
+  border: none !important;
+  padding: 0.3rem !important;
+  box-shadow: none !important;
+}
+
+.tag-chips {
+  display: contents;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+  border-radius: var(--corner-full);
+  padding: 0.25rem 0.4rem 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.tag-chip button {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tag-chip button .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.tag-chip button:hover {
+  background: rgba(0, 0, 0, 0.12);
+  box-shadow: none;
+  filter: none;
+}
+
+.contact-tag-pill {
+  display: inline-block;
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+  border-radius: var(--corner-full);
+  padding: 0.1rem 0.55rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  margin-left: 0.4rem;
+}
+
+/* Notes + Markdown preview */
+
+.notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.contact-notes-preview-btn {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.contact-notes-preview {
+  padding: 0.85rem 1rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  min-height: 3rem;
+}
+
+.contact-notes-preview :first-child { margin-top: 0; }
+.contact-notes-preview :last-child { margin-bottom: 0; }
+.contact-notes-preview ul { padding-left: 1.25rem; margin: 0.5rem 0; }
+.contact-notes-preview code {
+  background: var(--surface-container-high);
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--corner-xs);
+  font-size: 0.85em;
+}
+
+/* Contact picker (relationships) */
+
+.contact-picker-wrap {
+  position: relative;
+  flex: 1 1 160px;
+}
+
+.contact-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface-container-high);
+  border-radius: var(--corner-sm);
+  box-shadow: var(--elev-3);
+  padding: 0.25rem;
+}
+
+.contact-picker-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--on-surface);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--corner-xs);
+  font-size: 0.8125rem;
+}
+
+.contact-picker-option:hover {
+  background: var(--surface-container-highest);
+  box-shadow: none;
+  filter: none;
+}
+
+/* Unified Contact Card */
+
+.contact-card-modal {
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.contact-card-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.contact-card-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.contact-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contact-card-heading-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-card-heading-group h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.contact-card-subtitle {
+  margin: 0.2rem 0 0;
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+}
+
+.contact-card-tags {
+  margin-bottom: 1rem;
+}
+
+.contact-card-section {
+  margin-bottom: 1.1rem;
+}
+
+.contact-card-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--on-surface-variant);
+  font-weight: 600;
+}
+
+.contact-card-line {
+  font-size: 0.875rem;
+  color: var(--on-surface);
+  margin-bottom: 0.35rem;
+  line-height: 1.5;
+}
+
+.contact-card-line .contact-card-label {
+  color: var(--on-surface-variant);
+  font-size: 0.75rem;
+  margin-right: 0.4rem;
+}
+
+.contact-card-link {
+  color: var(--primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.contact-card-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Files ---------- */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.breadcrumb-segment {
+  background: transparent;
+  color: var(--primary);
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--corner-full);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.breadcrumb-segment:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: none;
+  filter: none;
+}
+
+.breadcrumb-segment:disabled {
+  color: var(--on-surface);
+  cursor: default;
+  box-shadow: none;
+  filter: none;
+}
+
+.breadcrumb-sep {
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+}
+
+.files-empty-state {
+  margin: 1rem 0.5rem;
+  font-size: 0.8125rem;
+  text-align: left;
+}
+
+.file-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--corner-lg);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+}
+
+.file-table th,
+.file-table td {
+  text-align: left;
+  padding: 0.85rem 0.85rem;
+  border-bottom: 1px solid var(--outline-variant);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-table th:first-child,
+.file-table td:first-child {
+  width: 3rem;
+  padding-left: 1.25rem;
+}
+
+.file-table th:nth-child(2),
+.file-table td:nth-child(2) {
+  width: 40%;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.file-table th:nth-child(3),
+.file-table td:nth-child(3) { width: 12%; }
+
+.file-table th:nth-child(4),
+.file-table td:nth-child(4) { width: 22%; }
+
+.file-table th:last-child,
+.file-table td:last-child {
+  width: 9rem;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.file-table th {
+  color: var(--on-surface-variant);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  background: var(--surface-container-low);
+}
+
+.file-table tbody tr {
+  animation: itemIn 0.28s var(--ease) both;
+  transition: background-color 0.12s var(--ease);
+  cursor: default;
+}
+
+.file-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.file-table tbody tr:hover {
+  background: var(--surface-container-low);
+}
+
 /* ---------- Calendar ---------- */
 
 .calendar-layout .content {
@@ -2348,5 +2935,186 @@ button.danger {
 
   .calendar-day-number {
     font-size: 0.75rem;
+  }
+}
+
+/* ---------- Duplicate contacts ---------- */
+
+.duplicates-modal {
+  max-width: 620px;
+}
+
+#duplicates-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.duplicate-group-card {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--corner-lg);
+  padding: 1rem;
+  background: var(--surface-container-low);
+}
+
+.duplicate-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.duplicate-candidate {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: var(--corner-md);
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease);
+}
+
+.duplicate-candidate:hover {
+  background: var(--surface-container);
+}
+
+.duplicate-candidate-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.duplicate-candidate-name {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.duplicate-candidate-detail {
+  font-size: 0.75rem;
+  color: var(--on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duplicate-group-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* ---------- Browse a server folder ---------- */
+
+.browse-server-modal {
+  max-width: 480px;
+}
+
+.browse-server-path {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+  background: var(--surface-container-low);
+  border-radius: var(--corner-sm);
+  padding: 0.6rem 0.85rem;
+  margin: 0 0 1rem;
+  overflow-wrap: anywhere;
+}
+
+.browse-server-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--corner-md);
+}
+
+.browse-server-item + .browse-server-item {
+  border-top: 1px solid var(--outline-variant);
+}
+
+.browse-server-item-btn {
+  width: 100%;
+  background: transparent;
+  color: var(--on-surface);
+  border: none;
+  border-radius: 0;
+  justify-content: flex-start;
+  padding: 0.65rem 0.85rem;
+  font-weight: 400;
+}
+
+.browse-server-item-btn:hover {
+  background: var(--surface-container);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.browse-server-item-btn .material-symbols-outlined {
+  color: var(--on-surface-variant);
+  font-size: 20px;
+}
+
+/* ---------- Feature toggle buttons (replaces checkboxes) ---------- */
+
+.feature-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+}
+
+.feature-toggle-btn {
+  background: transparent;
+  color: var(--on-surface-variant);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--corner-full);
+  padding: 0.6rem 1.1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease), transform 0.15s var(--ease);
+}
+
+.feature-toggle-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.feature-toggle-btn:hover {
+  background: var(--surface-container);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.feature-toggle-btn.is-on {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-color: transparent;
+}
+
+.feature-toggle-btn.is-on:hover {
+  filter: brightness(1.03);
+}
+
+/* ---------- Global page-load fade-in ---------- */
+/* Applied by ui.js to each page's top-level blocks once #app-shell becomes
+   visible — reuses the same fade+rise as the existing list-row entrance
+   (itemIn) so the whole page reads as animating in, not just list rows. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .content-fade-in {
+    animation: itemIn 0.35s var(--ease) both;
   }
 }

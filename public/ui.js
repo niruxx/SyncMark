@@ -124,6 +124,97 @@
     }
   };
 
+  /* Shared right-click context menu — originally built for the Calendar's
+     day-cell/event-pill menus, promoted here so files.js can reuse it
+     without duplicating it. */
+  let activeContextMenu = null;
+
+  window.closeContextMenu = function closeContextMenu() {
+    if (activeContextMenu) {
+      activeContextMenu.remove();
+      activeContextMenu = null;
+    }
+  };
+
+  window.isContextMenuOpen = function isContextMenuOpen() {
+    return Boolean(activeContextMenu);
+  };
+
+  // items: [{ label, icon, danger?, onClick }]
+  window.showContextMenu = function showContextMenu(x, y, items) {
+    window.closeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    for (const item of items) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `context-menu-item${item.danger ? ' danger' : ''}`;
+      btn.innerHTML = `<span class="material-symbols-outlined">${item.icon}</span>${item.label}`;
+      btn.addEventListener('click', () => {
+        window.closeContextMenu();
+        item.onClick();
+      });
+      menu.appendChild(btn);
+    }
+
+    document.body.appendChild(menu);
+    activeContextMenu = menu;
+
+    // Position after measuring, clamped so the menu never runs off-screen.
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(x, window.innerWidth - rect.width - 8);
+    const top = Math.min(y, window.innerHeight - rect.height - 8);
+    menu.style.left = `${Math.max(8, left)}px`;
+    menu.style.top = `${Math.max(8, top)}px`;
+  };
+
+  // A plain left click anywhere dismisses an open menu. Right-clicking a new
+  // target reopens it there instead (showContextMenu already closes the old
+  // one first) — no separate document-level "contextmenu" listener is
+  // needed, and one would misfire anyway: the cell/pill's own handler runs
+  // first and opens the new menu, then the same event bubbles to document.
+  document.addEventListener('click', () => window.closeContextMenu());
+  window.addEventListener('resize', () => window.closeContextMenu());
+  window.addEventListener('scroll', () => window.closeContextMenu(), true);
+
+  /* Feature toggles (Settings → Features): hides nav links for disabled
+     features, and bounces away from a page whose own feature is off. Every
+     page calls this once after signing in. Fails open on any error — a
+     transient /api/features hiccup should never lock someone out of their
+     own app. */
+  window.applyFeatureGate = async function applyFeatureGate() {
+    let features;
+    try {
+      const res = await fetch('/api/features');
+      if (!res.ok) return;
+      features = await res.json();
+    } catch {
+      return;
+    }
+
+    document.querySelectorAll('nav.nav a[data-feature]').forEach((link) => {
+      if (features[link.dataset.feature] === false) link.hidden = true;
+    });
+
+    const pageFeature = appShellFeature();
+    if (pageFeature && features[pageFeature] === false) {
+      const fallbacks = [
+        ['bookmarks', 'index.html'],
+        ['contacts', 'contacts.html'],
+        ['calendar', 'calendar.html'],
+        ['files', 'files.html'],
+      ];
+      const match = fallbacks.find(([key]) => features[key] !== false);
+      location.replace(match ? match[1] : 'settings.html');
+    }
+  };
+
+  function appShellFeature() {
+    const shell = document.getElementById('app-shell');
+    return shell ? shell.dataset.pageFeature || null : null;
+  }
+
   const toastContainer = document.createElement('div');
   toastContainer.className = 'toast-container';
   document.body.appendChild(toastContainer);
@@ -238,4 +329,51 @@
   } else {
     initAccountMenu();
   }
+
+  /* Global page-load fade-in: once #app-shell becomes visible (either right
+     away, for an already-signed-in reload, or after auth.js reveals it),
+     stagger a brief entrance across each page's top-level blocks so the
+     whole page feels like it animates in, not just list rows. */
+  function applyContentFadeIn() {
+    const shell = document.getElementById('app-shell');
+    if (!shell) return;
+    const targets = shell.querySelectorAll('.topbar, .sidebar, .content > *');
+    targets.forEach((el, i) => {
+      el.classList.add('content-fade-in');
+      el.style.animationDelay = `${Math.min(i * 40, 200)}ms`;
+    });
+  }
+
+  const shellEl = document.getElementById('app-shell');
+  if (shellEl) {
+    if (!shellEl.hidden) {
+      applyContentFadeIn();
+    } else {
+      const shellObserver = new MutationObserver(() => {
+        if (!shellEl.hidden) {
+          applyContentFadeIn();
+          shellObserver.disconnect();
+        }
+      });
+      shellObserver.observe(shellEl, { attributes: true, attributeFilter: ['hidden'] });
+    }
+  }
+
+  /* Livelier buttons: a small delegated ripple from the click position, no
+     library — position via CSS custom properties, animation lives in
+     style.css (and is skipped entirely under prefers-reduced-motion). */
+  document.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest('button, .button');
+    if (!btn || btn.disabled) return;
+    const rect = btn.getBoundingClientRect();
+    btn.style.setProperty('--ripple-x', `${e.clientX - rect.left}px`);
+    btn.style.setProperty('--ripple-y', `${e.clientY - rect.top}px`);
+    btn.classList.remove('rippling');
+    void btn.offsetWidth; // force reflow so re-adding the class restarts the animation
+    btn.classList.add('rippling');
+  });
+
+  document.addEventListener('animationend', (e) => {
+    if (e.animationName === 'buttonRipple') e.target.classList.remove('rippling');
+  });
 })();

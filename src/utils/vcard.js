@@ -83,6 +83,7 @@ function buildVCard(contact) {
   lines.push(`FN:${escapeText(fullName)}`);
   lines.push(`N:${escapeText(contact.last_name)};${escapeText(contact.first_name)};;;`);
   if (contact.organization) lines.push(`ORG:${escapeText(contact.organization)}`);
+  if (contact.title) lines.push(`TITLE:${escapeText(contact.title)}`);
 
   for (const { type, value } of parseJsonArray(contact.phones)) {
     if (!value) continue;
@@ -92,6 +93,21 @@ function buildVCard(contact) {
     if (!value) continue;
     lines.push(`EMAIL;TYPE=${(type || 'home').toUpperCase()}:${escapeText(value)}`);
   }
+  // Only the fields with a real vCard equivalent round-trip — messaging
+  // handles, custom fields, relationships, and key dates other than a
+  // "Birthday" entry are SyncMark-only (see README).
+  for (const addr of parseJsonArray(contact.addresses)) {
+    const parts = [addr.street, addr.city, addr.state, addr.postalCode, addr.country].map((p) => escapeText(p || ''));
+    lines.push(`ADR;TYPE=${(addr.type || 'home').toUpperCase()}:;;${parts.join(';')}`);
+  }
+  for (const { type, value } of parseJsonArray(contact.social_profiles)) {
+    if (!value) continue;
+    lines.push(`X-SOCIALPROFILE;TYPE=${(type || 'other').toUpperCase()}:${escapeText(value)}`);
+  }
+  const birthday = parseJsonArray(contact.key_dates).find((d) => /birthday/i.test(d.label || ''));
+  if (birthday && /^\d{4}-\d{2}-\d{2}$/.test(birthday.date)) lines.push(`BDAY:${birthday.date}`);
+  const tags = parseJsonArray(contact.tags);
+  if (tags.length) lines.push(`CATEGORIES:${tags.map(escapeText).join(',')}`);
   if (contact.notes) lines.push(`NOTE:${escapeText(contact.notes)}`);
   if (contact.photo && contact.photo_mime) {
     const base64 = Buffer.isBuffer(contact.photo) ? contact.photo.toString('base64') : Buffer.from(contact.photo).toString('base64');

@@ -12,7 +12,7 @@
   <script src="theme.js"></script>
 </head>
 <body>
-  <div id="app-shell" hidden>
+  <div id="app-shell" hidden data-page-feature="contacts">
     <header class="topbar">
       <div class="topbar-left">
         <a class="brand" href="index.html">
@@ -20,16 +20,17 @@
           <h1>SyncMark</h1>
         </a>
         <nav class="nav">
-          <a href="index.html">Bookmarks</a>
-          <a href="contacts.html" class="active">Contacts</a>
-          <a href="calendar.html">Calendar</a>
+          <a href="index.html" data-feature="bookmarks">Bookmarks</a>
+          <a href="contacts.html" data-feature="contacts" class="active">Contacts</a>
+          <a href="calendar.html" data-feature="calendar">Calendar</a>
+          <a href="files.html" data-feature="files">Files</a>
           <a href="settings.html">Settings</a>
         </nav>
       </div>
 
       <div class="topbar-search">
         <span class="material-symbols-outlined search-icon">search</span>
-        <input type="search" id="search-input" placeholder="Search your contacts" />
+        <input type="search" id="search-input" placeholder="Search name, company, title, phone, email, tags…" />
       </div>
 
       <div class="topbar-actions">
@@ -44,7 +45,7 @@
             <span class="material-symbols-outlined account-caret">expand_more</span>
           </button>
           <div class="account-dropdown" id="account-dropdown">
-            <a href="account.html" class="account-dropdown-item">
+            <a href="settings.html?tab=account" class="account-dropdown-item">
               <span class="material-symbols-outlined">manage_accounts</span>
               Account settings
             </a>
@@ -72,6 +73,15 @@
             <span class="folder-label">Favorites</span>
           </button></li>
         </ul>
+
+        <div class="sidebar-header">
+          <h2>Groups</h2>
+          <button id="manage-groups-btn" class="icon-btn" title="Manage groups">
+            <span class="material-symbols-outlined">settings</span>
+          </button>
+        </div>
+        <ul id="group-list"></ul>
+        <p class="folders-manage-empty" id="group-list-empty" hidden>Drag a contact here once you add a group.</p>
       </aside>
 
       <main class="content">
@@ -95,6 +105,10 @@
             <span class="material-symbols-outlined">download</span>
             Export .csv
           </a>
+          <button type="button" id="find-duplicates-btn" class="button secondary">
+            <span class="material-symbols-outlined">join</span>
+            Find duplicates
+          </button>
           <span id="result-count"></span>
         </div>
 
@@ -138,8 +152,33 @@
       </main>
     </div>
 
+    <!-- Read-only unified Contact Card -->
+    <div class="modal-backdrop" id="contact-card-modal">
+      <div class="modal contact-card-modal" role="dialog" aria-modal="true" aria-labelledby="contact-card-heading">
+        <div class="contact-card-header">
+          <div class="contact-card-avatar" id="contact-card-avatar"></div>
+          <div class="contact-card-heading-group">
+            <h2 id="contact-card-heading">Name</h2>
+            <p class="contact-card-subtitle" id="contact-card-subtitle"></p>
+          </div>
+          <button type="button" class="star-btn" id="contact-card-favorite-btn" title="Favorite">
+            <span class="material-symbols-outlined">star</span>
+          </button>
+        </div>
+        <div class="contact-card-tags" id="contact-card-tags"></div>
+        <div class="contact-card-body" id="contact-card-body"></div>
+        <div class="modal-actions">
+          <button type="button" id="contact-card-delete-btn" class="danger">Delete</button>
+          <span class="modal-actions-spacer"></span>
+          <button type="button" id="contact-card-close-btn" class="secondary">Close</button>
+          <button type="button" id="contact-card-edit-btn">Edit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/edit form -->
     <div class="modal-backdrop" id="contact-modal">
-      <div class="modal contact-modal" role="dialog" aria-modal="true" aria-labelledby="contact-modal-heading">
+      <div class="modal contact-modal contact-modal-scroll" role="dialog" aria-modal="true" aria-labelledby="contact-modal-heading">
         <h2 id="contact-modal-heading">Add contact</h2>
         <form id="contact-form">
           <div class="avatar-editor contact-photo-editor">
@@ -164,10 +203,25 @@
             </label>
           </div>
 
-          <label>
-            Organization
-            <input type="text" id="modal-organization" />
-          </label>
+          <div class="contact-name-row">
+            <label>
+              Organization
+              <input type="text" id="modal-organization" />
+            </label>
+            <label>
+              Job title
+              <input type="text" id="modal-title" />
+            </label>
+          </div>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Tags</span>
+            <div class="tag-input-wrap">
+              <div class="tag-chips" id="tag-chips"></div>
+              <input type="text" id="tag-input" placeholder="Type a tag and press Enter" list="tag-suggestions" />
+              <datalist id="tag-suggestions"></datalist>
+            </div>
+          </div>
 
           <div class="contact-field-group">
             <span class="contact-field-label">Phone numbers</span>
@@ -187,10 +241,68 @@
             </button>
           </div>
 
-          <label>
-            Notes
-            <textarea id="modal-notes" rows="3"></textarea>
-          </label>
+          <div class="contact-field-group">
+            <span class="contact-field-label">Addresses</span>
+            <div id="address-rows"></div>
+            <button type="button" id="add-address-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add address
+            </button>
+          </div>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Social profiles</span>
+            <div id="social-rows"></div>
+            <button type="button" id="add-social-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add profile
+            </button>
+          </div>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Messaging apps</span>
+            <div id="messaging-rows"></div>
+            <button type="button" id="add-messaging-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add handle
+            </button>
+          </div>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Key dates</span>
+            <div id="keydate-rows"></div>
+            <button type="button" id="add-keydate-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add date
+            </button>
+          </div>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Relationships</span>
+            <div id="relationship-rows"></div>
+            <button type="button" id="add-relationship-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add relationship
+            </button>
+          </div>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Custom fields</span>
+            <div id="customfield-rows"></div>
+            <button type="button" id="add-customfield-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add field
+            </button>
+          </div>
+
+          <div class="contact-field-group">
+            <div class="notes-header">
+              <span class="contact-field-label">Notes (Markdown: **bold**, *italic*, `code`, [link](url), - list)</span>
+              <button type="button" class="secondary contact-notes-preview-btn" id="notes-preview-toggle">Preview</button>
+            </div>
+            <textarea id="modal-notes" rows="4"></textarea>
+            <div class="contact-notes-preview" id="notes-preview" hidden></div>
+          </div>
 
           <label class="modal-checkbox">
             <input type="checkbox" id="modal-favorite-input" />
@@ -203,6 +315,60 @@
             <button type="submit" id="modal-save-btn">Save</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Manage groups -->
+    <div class="modal-backdrop" id="groups-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="groups-modal-heading">
+        <h2 id="groups-modal-heading">Manage groups</h2>
+        <ul class="folders-manage-list" id="groups-manage-list"></ul>
+        <p class="folders-manage-empty" id="groups-manage-empty" hidden>No groups yet.</p>
+
+        <form id="group-form">
+          <label>
+            Name
+            <input type="text" id="group-name-input" required />
+          </label>
+          <label>
+            Type
+            <select id="group-type-input">
+              <option value="manual">Manual — drag contacts onto it</option>
+              <option value="smart">Smart — matches contacts automatically</option>
+            </select>
+          </label>
+
+          <div id="smart-rules-section" hidden>
+            <span class="contact-field-label">Must match all of:</span>
+            <div id="smart-rule-rows"></div>
+            <button type="button" id="add-smart-rule-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add rule
+            </button>
+          </div>
+
+          <p class="modal-error" id="group-form-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="group-form-cancel-btn" class="secondary" hidden>Cancel edit</button>
+            <button type="submit" id="group-form-save-btn">Add group</button>
+          </div>
+        </form>
+
+        <div class="modal-actions">
+          <button type="button" id="groups-modal-close-btn" class="secondary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="duplicates-modal">
+      <div class="modal duplicates-modal" role="dialog" aria-modal="true" aria-labelledby="duplicates-modal-heading">
+        <h2 id="duplicates-modal-heading">Possible duplicates</h2>
+        <p class="settings-hint">Grouped by matching name, email, or phone number. Pick which one to keep, then merge — everything else is combined into it.</p>
+        <div id="duplicates-list"></div>
+        <p class="folders-manage-empty" id="duplicates-empty" hidden>No duplicates found.</p>
+        <div class="modal-actions">
+          <button type="button" id="duplicates-modal-close-btn" class="secondary">Close</button>
+        </div>
       </div>
     </div>
   </div>

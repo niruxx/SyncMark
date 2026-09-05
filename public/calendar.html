@@ -12,7 +12,7 @@
   <script src="theme.js"></script>
 </head>
 <body>
-  <div id="app-shell" hidden>
+  <div id="app-shell" hidden data-page-feature="calendar">
     <header class="topbar">
       <div class="topbar-left">
         <a class="brand" href="index.html">
@@ -20,9 +20,10 @@
           <h1>SyncMark</h1>
         </a>
         <nav class="nav">
-          <a href="index.html">Bookmarks</a>
-          <a href="contacts.html">Contacts</a>
-          <a href="calendar.html" class="active">Calendar</a>
+          <a href="index.html" data-feature="bookmarks">Bookmarks</a>
+          <a href="contacts.html" data-feature="contacts">Contacts</a>
+          <a href="calendar.html" data-feature="calendar" class="active">Calendar</a>
+          <a href="files.html" data-feature="files">Files</a>
           <a href="settings.html">Settings</a>
         </nav>
       </div>
@@ -44,7 +45,7 @@
             <span class="material-symbols-outlined account-caret">expand_more</span>
           </button>
           <div class="account-dropdown" id="account-dropdown">
-            <a href="account.html" class="account-dropdown-item">
+            <a href="settings.html?tab=account" class="account-dropdown-item">
               <span class="material-symbols-outlined">manage_accounts</span>
               Account settings
             </a>

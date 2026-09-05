@@ -67,55 +67,9 @@ async function api(path, options) {
   return res.json();
 }
 
-// --- Context menu ---
-
-let activeContextMenu = null;
-
-function closeContextMenu() {
-  if (activeContextMenu) {
-    activeContextMenu.remove();
-    activeContextMenu = null;
-  }
-}
-
-// items: [{ label, icon, danger?, onClick }] — used for both the day-cell
-// ("Add event") and event-pill ("Edit event" / "Remove event") right-click menus.
-function showContextMenu(x, y, items) {
-  closeContextMenu();
-
-  const menu = document.createElement('div');
-  menu.className = 'context-menu';
-  for (const item of items) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `context-menu-item${item.danger ? ' danger' : ''}`;
-    btn.innerHTML = `<span class="material-symbols-outlined">${item.icon}</span>${item.label}`;
-    btn.addEventListener('click', () => {
-      closeContextMenu();
-      item.onClick();
-    });
-    menu.appendChild(btn);
-  }
-
-  document.body.appendChild(menu);
-  activeContextMenu = menu;
-
-  // Position after measuring, clamped so the menu never runs off-screen.
-  const rect = menu.getBoundingClientRect();
-  const left = Math.min(x, window.innerWidth - rect.width - 8);
-  const top = Math.min(y, window.innerHeight - rect.height - 8);
-  menu.style.left = `${Math.max(8, left)}px`;
-  menu.style.top = `${Math.max(8, top)}px`;
-}
-
-// A plain left click anywhere dismisses an open menu. Right-clicking a new
-// target reopens it there instead (showContextMenu already closes the old
-// one first) — no separate document-level "contextmenu" listener is needed,
-// and one would misfire anyway: the cell/pill's own handler runs first and
-// opens the new menu, then the same event bubbles to document.
-document.addEventListener('click', closeContextMenu);
-window.addEventListener('resize', closeContextMenu);
-window.addEventListener('scroll', closeContextMenu, true);
+// Context menu (showContextMenu/closeContextMenu/isContextMenuOpen) now
+// lives in ui.js, shared with files.js — see the notes there.
+const { showContextMenu, closeContextMenu, isContextMenuOpen } = window;
 
 // --- Date helpers ---
 
@@ -528,7 +482,7 @@ els.modal.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (activeContextMenu) closeContextMenu();
+  if (isContextMenuOpen()) closeContextMenu();
   else if (els.modal.classList.contains('is-open')) closeModal();
   else if (!els.dayPanel.hidden) closeDayPanel();
 });
@@ -600,3 +554,4 @@ async function loadAccountBadge() {
 
 loadEvents();
 loadAccountBadge();
+applyFeatureGate();

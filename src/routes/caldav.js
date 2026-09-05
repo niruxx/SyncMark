@@ -2,6 +2,7 @@ const express = require('express');
 const cheerio = require('cheerio');
 const { statements, currentEventsSeq, deleteEventById, upsertEventFromICal } = require('../db');
 const { basicAuth } = require('../middleware/basicAuth');
+const { requireFeatureDav } = require('../middleware/featureGate');
 const { buildICS, parseICS } = require('../utils/ical');
 
 const router = express.Router();
@@ -18,6 +19,10 @@ router.use('/dav', express.text({ type: () => true, limit: '10mb' }));
 router.get('/.well-known/caldav', (req, res) => res.redirect(301, '/dav/'));
 
 router.use('/dav', basicAuth);
+
+// Hard-blocks the calendar itself when Calendar is turned off in Settings —
+// carddav.js's shared principal handler separately stops *advertising* it.
+router.use('/dav/calendars', requireFeatureDav('calendar'));
 
 // ---------- helpers ----------
 
