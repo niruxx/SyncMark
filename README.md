@@ -9,6 +9,8 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - [Features](#features)
 - [Screenshots](#screenshots)
 - [Installation](#installation)
+  - [Linux — step by step](#linux--step-by-step)
+  - [Other platforms](#other-platforms)
 - [Hosting](#hosting)
 - [Updating an existing instance](#updating-an-existing-instance)
 - [Configuration](#configuration)
@@ -17,6 +19,8 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - [Contacts & CardDAV sync](#contacts--carddav-sync)
 - [Calendar & CalDAV sync](#calendar--caldav-sync)
 - [File Manager](#file-manager)
+- [Mobile use](#mobile-use)
+- [Backup & restore](#backup--restore)
 - [API](#api)
 
 ## Features
@@ -28,8 +32,8 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - **Feature toggles** (Settings → General, also set during first-run): turn Bookmarks/Contacts/Calendar/Files on or off — disabling one hard-blocks its API and CardDAV/CalDAV routes, not just its nav tab — see [Feature toggles](#feature-toggles)
 - Click the "SyncMark" title in the top left from anywhere to jump back to your bookmarks
 - Configurable session length (Settings → Session): stay signed in for 5 minutes, 1 hour, 30 days, or permanently (never asked again) — applies the next time you sign in
-- Account menu (top right, click your name): jump to account settings or sign out from anywhere in one click, no need to dig into Settings first
-- Account management (top right): set a custom profile picture (PNG/JPEG/GIF/WebP, up to 2 MB — stored in the database and shown in the top bar on every page), and change your username or password, each re-confirmed with your current password
+- Account menu (top right, click your name): jump straight to Settings → Account, or sign out, from anywhere in one click
+- **Settings → Account**: set a custom profile picture (PNG/JPEG/GIF/WebP, up to 2 MB — stored in the database and shown in the top bar on every page), and change your username or password, each re-confirmed with your current password — lives alongside every other Settings tab rather than a separate page
 - A top progress bar on every action — API calls and page navigations alike — so nothing ever feels like it silently hung
 - Delete account (Settings → Danger zone): password-confirmed, permanently wipes the account *and* every bookmark/folder/setting, then returns to the first-run setup screen
 - Import Netscape-format HTML bookmark exports (Chrome, Firefox, Edge, Safari) and JSON exports (Chrome's `Bookmarks` file, Firefox's JSON backup, or a generic `{title, url}[]` array)
@@ -49,11 +53,14 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - **Contacts tab** with its own add/edit/delete UI (name, phone numbers, emails, organization, notes, favorite, photo) plus a built-in **CardDAV server** so contacts stay in sync with your phone's native contacts app — see [Contacts & CardDAV sync](#contacts--carddav-sync)
 - Contacts: import/export `.vcf` (vCard) or `.csv` files, multi-select with a bulk-action bar (favorite/unfavorite/export/delete selected), sort by name or date added
 - Contacts: fuzzy search (name/org/title/phone/email/tags), a unified read-only Contact Card, Markdown notes, addresses/social profiles/messaging handles/custom fields/key dates, relationships linked to other contacts, and tags + drag-and-drop manual or rule-based smart groups — see [Fuzzy search, unified cards, tags & groups](#fuzzy-search-unified-cards-tags--groups)
+- **Duplicate contact detection**: finds probable duplicate contacts by matching name, email, or phone number, and merges them in one click — see [Fuzzy search, unified cards, tags & groups](#fuzzy-search-unified-cards-tags--groups)
 - **Calendar tab** with a full month-grid view, basic recurring events (daily/weekly/monthly, with an optional end date), and a built-in **CalDAV server** so events sync with your phone's native calendar app — the same server address and login as Contacts sync — see [Calendar & CalDAV sync](#calendar--caldav-sync)
 - Calendar: click a date to open that day's events in a side panel (the month grid shrinks to make room); right-click a date or an event for a quick Add/Edit/Remove menu; import/export `.ics` (iCalendar) files
 - Settings → **How to use SyncMark**: an in-app quick tour plus step-by-step CardDAV/CalDAV sync setup for iOS, Android, Linux, and Windows
 - **File Manager tab** (off by default — turn it on in Settings → General) — browse, upload, download, rename, and delete files under one or more admin-configured, strictly sandboxed server folders ("locations") — see [File Manager](#file-manager)
-- **Tabbed Settings**: General / Bookmarks / Files / Contacts / Calendar, each with only the import/export, sync, and stats controls relevant to it, instead of one long scrolling page
+- **Mobile-responsive UI**: the whole app is usable on a phone, not just squeezed to fit — a slide-in drawer for folders/groups/locations, tables become tap-friendly cards, dialogs go full-screen, and long-press stands in for right-click — see [Mobile use](#mobile-use)
+- **Automated backups**: scheduled (daily/weekly) or on-demand full-instance snapshots with retention and one-click, password-confirmed restore — see [Backup & restore](#backup--restore)
+- **Tabbed Settings**: Account / General / Bookmarks / Files / Contacts / Calendar / Backup, each with only the controls relevant to it instead of one long scrolling page, plus a search box that filters settings by keyword across every tab at once
 
 ## Screenshots
 
@@ -66,43 +73,109 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 
 ## Installation
 
-**Prerequisites:** [Node.js](https://nodejs.org) 18 or later (which includes npm). No external database — everything lives in one SQLite file.
+**Prerequisites:** [Node.js](https://nodejs.org) 18 or later (which includes npm). No external database — everything lives in one SQLite file. There's no build step and no separate frontend to compile — `npm install` followed by `npm start` is the whole install, on every platform.
 
-Install Node from [nodejs.org](https://nodejs.org)'s own binaries or via [nvm](https://github.com/nvm-sh/nvm) rather than your distro's package manager where you have the choice. This matters most on Debian/Ubuntu: Debian 13 ("trixie")'s `apt` repo, for example, ships Node 20 bundled with **npm 9.2.0** — over two years old — which is the version most likely to hit the `npm audit fix` issue described below. A distro-packaged Node isn't *broken*, just old enough that its bundled npm has known rough edges.
+### Linux — step by step
 
-```bash
-git clone <this-repo-url> syncmark
-cd syncmark
-npm install
-npm start
-```
+This is the fullest walkthrough because Linux is the one platform where a few things (which Node you get, whether a C/C++ toolchain exists) vary by distro and aren't handled for you. macOS and Windows users can skip to [Other platforms](#other-platforms) below.
 
-Open `http://localhost:3000` and follow the on-screen setup — a short two-step wizard: your username and password, then which tabs to turn on (Bookmarks/Contacts/Calendar default on, Files defaults off since it reads/writes the server filesystem — all changeable later in Settings → General → Features). That's the whole install — there's no build step, no separate frontend to compile.
-
-`npm install` builds the `better-sqlite3` native module for your platform. If it prompts about install scripts (`npm warn allow-scripts …`), that's expected the first time on a new machine/OS — approve it with:
+**1. Install Node.js via nvm, not your distro's package manager.**
+Debian/Ubuntu's `apt` repo, for example, ships Node 20 bundled with **npm 9.2.0** — over two years old, and the version most likely to hit the `npm audit fix` bug described in step 6. [nvm](https://github.com/nvm-sh/nvm) sidesteps this entirely and works the same way on every distro:
 
 ```bash
-npm approve-scripts better-sqlite3
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+\. "$HOME/.nvm/nvm.sh"
+nvm install --lts
+node -v && npm -v   # sanity check — should print v18+ and a current npm
 ```
 
-**Linux only — if `npm install` fails while building `better-sqlite3`:** npm normally fetches a prebuilt binary and skips compiling entirely; it only falls back to building from source (via `node-gyp rebuild`) when none matches your exact Node version/architecture, and that build needs a C/C++ toolchain most minimal Linux installs don't have by default. If you see an error like `gyp ERR! stack Error: not found: make`, install the build tools for your distro first, then re-run `npm install`:
+**2. Install git, if it isn't already there:**
+
+```bash
+# Debian/Ubuntu
+sudo apt-get update && sudo apt-get install -y git
+
+# Fedora/RHEL
+sudo dnf install -y git
+
+# Arch
+sudo pacman -S git
+```
+
+**3. Install a C/C++ build toolchain.**
+SyncMark's only native dependency, `better-sqlite3`, normally installs a prebuilt binary with no compiling at all — but if none matches your exact Node version/CPU architecture, `npm install` falls back to building it from source, and that needs `make`, a compiler, and Python, which most minimal/server Linux installs don't have out of the box. Installing this *before* step 5 avoids hitting a `gyp ERR! stack Error: not found: make` failure partway through:
 
 ```bash
 # Debian/Ubuntu
 sudo apt-get install -y build-essential python3
 
 # Fedora/RHEL
-sudo dnf groupinstall "Development Tools" -y
+sudo dnf groupinstall -y "Development Tools"
 sudo dnf install -y python3
 
 # Arch
 sudo pacman -S base-devel python
 ```
 
-macOS and Windows aren't usually affected — macOS ships `make`/`clang` with Xcode Command Line Tools (`xcode-select --install` if missing), and Windows almost always has a matching prebuilt binary available.
+**4. Clone the repository:**
 
+```bash
+git clone <this-repo-url> syncmark
+cd syncmark
+```
 
-**Ignore the "N vulnerabilities... run `npm audit fix`" nudge `npm install` prints.** It's flagging a `qs` vulnerability nested three levels down (`qs` ← `body-parser` ← `express`), and there's no non-breaking fix for it yet — only a major-version bump of Express that npm can't apply automatically. Running `npm audit fix` against a transitive vulnerability like that is a [documented source of npm bugs](https://github.com/npm/cli/issues/6356) — it can loop, alternate between package versions on repeat runs, or "fix" it and then immediately report the same vulnerability again — and older/bundled npm releases (see the Debian note above) are the ones most likely to actually get stuck rather than fail cleanly. There's nothing to act on here: just don't run `npm audit fix`, and it'll resolve itself once Express ships a release with a patched `qs`.
+**5. Install dependencies:**
+
+```bash
+npm install
+```
+
+If this prompts about install scripts (`npm warn allow-scripts …`), that's expected the first time on a new machine — approve it with `npm approve-scripts better-sqlite3`.
+
+**6. Ignore the "N vulnerabilities... run `npm audit fix`" nudge npm prints.**
+It's flagging a `qs` vulnerability nested three levels down (`qs` ← `body-parser` ← `express`), and there's no non-breaking fix for it yet — only a major-version bump of Express that npm can't apply automatically. Running `npm audit fix` against a transitive vulnerability like that is a [documented source of npm bugs](https://github.com/npm/cli/issues/6356) — it can loop, alternate between package versions on repeat runs, or "fix" it and then immediately report the same vulnerability again. There's nothing to act on: just don't run `npm audit fix`, and it'll resolve itself once Express ships a release with a patched `qs`.
+
+**7. Start the server:**
+
+```bash
+npm start
+```
+
+You should see `SyncMark running at http://localhost:3000`.
+
+**8. Open it and finish setup.**
+On the same machine, visit `http://localhost:3000`. Follow the on-screen two-step wizard: your username and password, then which tabs to turn on (Bookmarks/Contacts/Calendar default on, Files defaults off since it reads/writes the server filesystem — all changeable later in Settings → General → Features).
+
+**9. (Optional) Reach it from your phone or another device on the same network.**
+Find the server's LAN IP (`ip addr show` or `hostname -I`), then open port 3000 to your LAN if a firewall is active:
+
+```bash
+# ufw (Ubuntu default, if enabled)
+sudo ufw allow 3000/tcp
+
+# firewalld (Fedora/RHEL default)
+sudo firewall-cmd --add-port=3000/tcp --permanent && sudo firewall-cmd --reload
+```
+
+Then visit `http://<that-ip>:3000` from your phone or laptop — the whole web UI, including the mobile-optimized layout, works the same way over LAN as it does on localhost.
+
+**10. (Optional but recommended) Keep it running after you log out or reboot.**
+`npm start` only runs while that terminal session is open. For anything beyond quick testing, run it as a systemd service instead — see [systemd (Linux)](#systemd-linux) under Hosting below for the exact unit file, or use [pm2](#pm2-cross-platform-process-manager) if you'd rather not touch systemd.
+
+### Other platforms
+
+**macOS**: ships `make`/`clang` via Xcode Command Line Tools (`xcode-select --install` if `npm install` ever asks for them), so step 3 above is rarely needed. Otherwise the same `git clone` → `npm install` → `npm start` applies, and [nvm](https://github.com/nvm-sh/nvm) is still the recommended way to get Node over Homebrew or the installer from nodejs.org, for the same "keep npm current" reason as Linux.
+
+**Windows**: almost always has a matching prebuilt `better-sqlite3` binary, so there's no build-tools step at all. Install Node from [nodejs.org](https://nodejs.org) (or `nvm-windows`), then the same three commands:
+
+```powershell
+git clone <this-repo-url> syncmark
+cd syncmark
+npm install
+npm start
+```
+
+Open `http://localhost:3000` and follow the same first-run setup as above.
 
 ## Hosting
 
@@ -238,10 +311,11 @@ Everything is configured through environment variables at the process level, or 
 | Data location | fixed at `data/bookmarks.sqlite3` | see [Data & backups](#data--backups) below |
 | Theme, default view | Settings page | stored in the browser's `localStorage`, per-browser |
 | Session length | Settings → Session | `5m` / `hourly` / `monthly` / `permanent`; stored server-side, applies to your *next* sign-in |
-| Account (username/password) | Account page (top right) | requires your current password to change |
-| Profile picture | Account page (top right) | stored in the database, so it survives updates and follows you to any browser |
+| Account (username/password) | Settings → Account | requires your current password to change |
+| Profile picture | Settings → Account | stored in the database, so it survives updates and follows you to any browser |
 | Feature toggles | Settings → General → Features | Bookmarks/Contacts/Calendar on by default, Files off by default — see [Feature toggles](#feature-toggles) below |
 | File locations | Settings → Files | name + absolute server path per location — see [File Manager](#file-manager) below |
+| Backup schedule | Settings → Backup | off by default; frequency, retention count, and an optional custom directory — see [Backup & restore](#backup--restore) below |
 
 ### Resetting a forgotten password
 
@@ -322,6 +396,7 @@ A contact added, edited, or deleted on your phone syncs back to SyncMark (and to
 - **Relationships** link to another real contact in your address book (e.g. "Manager: Jane Doe") rather than a free-text name — click through to jump to theirs, and deleting a linked contact automatically removes the relationship entries that pointed at it elsewhere.
 - **Tags** are free-form labels on a contact (autocompleted from tags you've already used) and show as small pills on the row and card.
 - **Groups** (sidebar, "Manage groups") are either **manual** — drag a contact from the table onto a group to add it — or **smart**, matching contacts automatically against a small set of AND-ed rules (tag equals, organization/title contains, favorite is, added within N days) — e.g. a "Clients added this month" group is `tag equals Client` + `added within 30 days`.
+- **Duplicate detection** — the toolbar's "Find duplicates" button groups contacts that share a normalized email, phone number, or exact full name. For each group, pick which contact to keep (defaults to whichever has the most fields filled in), choose which of the others to fold in, and merge: every phone/email/address/social profile/messaging handle/tag/custom field/key date is unioned onto the survivor, relationships and group memberships that pointed at a merged-away contact are repointed rather than dropped, and the merged-away contacts are deleted. A group can also be dismissed as "not duplicates," which is remembered so it won't keep resurfacing.
 
 ## Calendar & CalDAV sync
 
@@ -344,13 +419,41 @@ The **Calendar** tab works the same way, for events instead of contacts: a full 
 
 The **Files** tab is a personal file browser for the server itself — off by default (see [Feature toggles](#feature-toggles)), since it's the one feature that reads and writes the host filesystem directly.
 
-**Setup**: Settings → Files → add a **location** — a name plus an absolute path on the server (e.g. `/srv/media` or `C:\Users\me\Documents`). The path must already exist and be a directory. Add as many as you like; each shows up as its own entry in the Files tab's sidebar.
+**Setup**: Settings → Files → add a **location** — a name plus an absolute path on the server (e.g. `/srv/media` or `C:\Users\me\Documents`). The path must already exist and be a directory; either type it in directly, or click **Browse…** to navigate the server's filesystem (starting from the drive list on Windows, or `/` elsewhere) and pick a folder without needing to know its exact path. Add as many as you like; each shows up as its own entry in the Files tab's sidebar.
 
 **Sandboxing**: every location is a hard boundary. Browsing, uploading, downloading, renaming, and deleting can never reach outside the configured path — no `..` traversal, no absolute-path injection, and (best-effort) no escaping through a symlink placed inside the location either. Removing a location in Settings only un-registers it; nothing on disk is touched.
 
 **Using it**: double-click a folder to open it, click a file's Download button (or double-click it) to download, and right-click anything — a file, a folder, or empty space in the list — for a quick Add/Rename/Delete/Download menu. "New folder" and "Upload" (multiple files at once) are in the top bar. Uploads stream straight to disk rather than buffering in memory, and — unlike the 2 MB/25 MB caps on avatars and bookmark/contact/calendar imports elsewhere in the app — there's no file-size limit; disk space is the natural ceiling for a personal file server.
 
 **Known limitations**: no in-browser text/image preview or editing (download to view), no move-between-locations or bulk multi-select yet, and no archive (.zip) download for a whole folder at once.
+
+## Mobile use
+
+Every page works on a phone browser, not just a shrunk-down desktop layout:
+
+- **Collapsible navigation**: the top nav (Bookmarks/Contacts/Calendar/Files/Settings) collapses into a hamburger menu on narrow screens instead of wrapping awkwardly.
+- **Slide-in drawer**: on Bookmarks, Contacts, and Files — the three pages with a sidebar (folders, groups, and locations respectively) — the sidebar becomes an off-canvas drawer opened by a menu button, with a tap-outside-to-close backdrop, rather than pushing the page content down.
+- **Tables become cards**: the Bookmarks, Contacts, and Files tables restack into a card per row on phone-width screens instead of squeezing a multi-column table.
+- **Full-screen dialogs**: every modal (adding/editing a contact, an event, a bookmark, and so on) takes over the full screen on a phone instead of rendering as a cramped centered box.
+- **Calendar**: the month grid stays a grid rather than switching to a list, with events shown as a small dot per day; tapping a day opens its event list as a full-screen sheet.
+- **Touch targets and gestures**: icon buttons meet the 44px minimum touch-target size on mobile, and long-pressing a calendar day/event or a file/folder brings up the same quick-action menu that right-clicking shows on desktop.
+- Reordering bookmarks and folders by dragging is desktop-only for now — sorting by title/date, and the Folder field in the edit dialog, cover the same ground on a phone.
+
+There's no installable app or offline support (no PWA manifest/service worker) — it's a responsive website you reach through your phone's regular browser, over the same address as any other device on your network.
+
+## Backup & restore
+
+Settings → Backup covers both scheduled and one-off backups of the whole instance — not just bookmarks, but contacts (with groups), the calendar, file locations, and account/settings too.
+
+**What a backup contains**: a single gzip-compressed JSON snapshot of every table except active sessions (restoring signs every device out on purpose — see below). It's a portable, human-inspectable format, not a copy of the raw SQLite file.
+
+**Automatic backups** (off by default): turn on "Back up automatically," choose daily or weekly, and how many backups to keep (oldest are pruned once you're over the count). By default backups are written to `data/backups/` on the server, but you can point the directory field at anywhere else the server can write to — including a folder synced by rclone, Dropbox, OneDrive, or similar, if you want an actual off-machine copy. SyncMark itself has no cloud-provider integration; pointing it at a synced folder is what gets a copy off the machine.
+
+**Manual backups**: "Back up now" creates one immediately with the current settings, independent of the schedule.
+
+**Restoring**: each entry in the restore-points list can be downloaded (as plain `.json`, decompressed), deleted, or restored. Restoring is as destructive as it sounds — it replaces everything currently in the instance with the backup's contents — so it's password-confirmed, like deleting the account, and every device (including the one doing the restore) is signed out afterward since the account itself may have changed. It runs live, through the server's existing database connection; there's no need to stop or restart the server to restore a backup.
+
+**Note on CardDAV/CalDAV sync after a restore**: restoring an older backup can move contacts/calendar data backward relative to what a phone or desktop client last synced. If a synced device looks out of step afterward, removing and re-adding its CardDAV/CalDAV account forces a full resync.
 
 ## API
 
@@ -391,6 +494,9 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | GET    | `/api/contacts/export` | Download every contact (or `?ids=1,2,3` for a selection) as one `.vcf` file, or `.csv` with `?format=csv` |
 | POST   | `/api/contacts/import` | Upload a `.vcf` or `.csv` file (multipart, field `file`) — format is sniffed from the filename/content, one or many contacts |
 | POST   | `/api/contacts/bulk`  | Bulk action on selected contacts (`{ ids: number[], action: "delete"\|"favorite"\|"unfavorite" }`) |
+| GET    | `/api/contacts/duplicates` | Grouped probable-duplicate contacts (matching name/email/phone), dismissed pairs excluded |
+| POST   | `/api/contacts/merge` | Merge contacts (`{ primaryId, mergeIds: number[] }`) — unions fields onto `primaryId`, repoints relationships/group membership, deletes the rest |
+| POST   | `/api/contacts/duplicates/dismiss` | Mark a set of contacts as "not duplicates" (`{ ids: number[] }`), remembered per pair |
 | GET    | `/api/contacts/:id`   | Get a single contact                                 |
 | PUT    | `/api/contacts/:id`   | Update a contact                                     |
 | DELETE | `/api/contacts/:id`   | Remove a contact                                     |
@@ -420,11 +526,18 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | POST   | `/api/files/locations` | Add a location (`{ name, path }`) — `path` must be an absolute, existing directory |
 | PUT    | `/api/files/locations/:id` | Update a location's name/path                    |
 | DELETE | `/api/files/locations/:id` | Un-register a location — never touches anything on disk |
+| GET    | `/api/files/browse-server` | List directories at an arbitrary server path (`?path=`, omit for the drive list on Windows or `/` elsewhere) — for picking a location's path, not sandboxed to a location |
 | GET    | `/api/files/browse`   | List a folder's contents (`?location=<id>&path=<relative>`) — `[{ name, type: "dir"\|"file", size, modifiedAt }]` |
 | GET    | `/api/files/download` | Download a file (`?location=&path=`), streamed          |
 | POST   | `/api/files/upload`   | Upload one or more files (`?location=&path=`, multipart field `files`) — 409 if a name collides unless `&overwrite=1` |
 | POST   | `/api/files/mkdir`    | Create a folder (`{ location, path, name }`)             |
 | PUT    | `/api/files/rename`   | Rename a file or folder in place (`{ location, path, newName }`) |
 | DELETE | `/api/files/item`     | Delete a file, or a folder and everything in it (`?location=&path=`) |
+| GET    | `/api/backups`        | List restore points (`[{ name, size, modifiedAt }]`), newest first |
+| POST   | `/api/backups/run`    | Create a backup immediately, using the current schedule settings |
+| GET/PUT | `/api/backups/schedule` | Get/set the backup schedule (`{ enabled, frequency: "daily"\|"weekly", retentionCount, dir }`) |
+| GET    | `/api/backups/:file/download` | Download a backup, decompressed to plain `.json` |
+| DELETE | `/api/backups/:file`  | Delete one restore point                             |
+| POST   | `/api/backups/:file/restore` | Restore a backup (`{ password }`) — replaces all current data, signs out every device |
 
 Favicons are rendered client-side via Google's public favicon service (`s2/favicons`), based on each bookmark's domain — no favicon data is stored server-side. Theme and default view preferences are stored in the browser's `localStorage`.
