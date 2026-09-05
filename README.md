@@ -68,6 +68,8 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 
 **Prerequisites:** [Node.js](https://nodejs.org) 18 or later (which includes npm). No external database — everything lives in one SQLite file.
 
+Install Node from [nodejs.org](https://nodejs.org)'s own binaries or via [nvm](https://github.com/nvm-sh/nvm) rather than your distro's package manager where you have the choice. This matters most on Debian/Ubuntu: Debian 13 ("trixie")'s `apt` repo, for example, ships Node 20 bundled with **npm 9.2.0** — over two years old — which is the version most likely to hit the `npm audit fix` issue described below. A distro-packaged Node isn't *broken*, just old enough that its bundled npm has known rough edges.
+
 ```bash
 git clone <this-repo-url> syncmark
 cd syncmark
@@ -83,11 +85,15 @@ Open `http://localhost:3000` and follow the on-screen setup — a short two-step
 npm approve-scripts better-sqlite3
 ```
 
+**Ignore the "N vulnerabilities... run `npm audit fix`" nudge `npm install` prints.** It's flagging a `qs` vulnerability nested three levels down (`qs` ← `body-parser` ← `express`), and there's no non-breaking fix for it yet — only a major-version bump of Express that npm can't apply automatically. Running `npm audit fix` against a transitive vulnerability like that is a [documented source of npm bugs](https://github.com/npm/cli/issues/6356) — it can loop, alternate between package versions on repeat runs, or "fix" it and then immediately report the same vulnerability again — and older/bundled npm releases (see the Debian note above) are the ones most likely to actually get stuck rather than fail cleanly. There's nothing to act on here: just don't run `npm audit fix`, and it'll resolve itself once Express ships a release with a patched `qs`.
+
 ## Hosting
 
-SyncMark is a single long-running Node process (`node server.js`) plus a SQLite file — host it however you'd host any small Node app. A few ways to keep it running:
+SyncMark is a single long-running Node process (`node server.js`) plus a SQLite file — host it however you'd host any small Node app. Whichever method you pick below (other than Docker), the same [Installation](#installation) advice applies to the host too: install Node from [nodejs.org](https://nodejs.org) or nvm rather than the OS package manager if you can, especially on Debian/Ubuntu. A few ways to keep it running:
 
 ### Docker (recommended for a server/NAS)
+
+The Docker path sidesteps the npm-version issue above entirely — the `Dockerfile` builds on the official `node:20-bookworm-slim` image, which bundles Node's own current npm rather than Debian's `apt` one.
 
 ```bash
 docker compose up -d --build
