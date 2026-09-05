@@ -83,6 +83,22 @@ Open `http://localhost:3000` and follow the on-screen setup — a short two-step
 npm approve-scripts better-sqlite3
 ```
 
+**Linux only — if `npm install` fails while building `better-sqlite3`:** npm normally fetches a prebuilt binary and skips compiling entirely; it only falls back to building from source (via `node-gyp rebuild`) when none matches your exact Node version/architecture, and that build needs a C/C++ toolchain most minimal Linux installs don't have by default. If you see an error like `gyp ERR! stack Error: not found: make`, install the build tools for your distro first, then re-run `npm install`:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install -y build-essential python3
+
+# Fedora/RHEL
+sudo dnf groupinstall "Development Tools" -y
+sudo dnf install -y python3
+
+# Arch
+sudo pacman -S base-devel python
+```
+
+macOS and Windows aren't usually affected — macOS ships `make`/`clang` with Xcode Command Line Tools (`xcode-select --install` if missing), and Windows almost always has a matching prebuilt binary available.
+
 ## Hosting
 
 SyncMark is a single long-running Node process (`node server.js`) plus a SQLite file — host it however you'd host any small Node app. A few ways to keep it running:
