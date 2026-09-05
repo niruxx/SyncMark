@@ -111,7 +111,7 @@ sudo apt-get install -y build-essential python3
 
 # Fedora/RHEL
 sudo dnf groupinstall -y "Development Tools"
-sudo dnf install -y python3
+sudo dnf install -y make gcc-c++ python3
 
 # Arch
 sudo pacman -S base-devel python
