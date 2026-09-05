@@ -14,6 +14,8 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - [Configuration](#configuration)
 - [Importing bookmarks](#importing-bookmarks)
 - [Browser extensions](#browser-extensions)
+- [Contacts & CardDAV sync](#contacts--carddav-sync)
+- [Calendar & CalDAV sync](#calendar--caldav-sync)
 - [API](#api)
 
 ## Features
@@ -42,6 +44,11 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - Settings page: import bookmarks, light/dark theme, default view, library stats, export, and a clear-all-bookmarks reset
 - Single Node process, SQLite storage — no external database required
 - Firefox and Chrome toolbar extensions (`extensions/`) for quick access without opening a tab
+- **Contacts tab** with its own add/edit/delete UI (name, phone numbers, emails, organization, notes, favorite, photo) plus a built-in **CardDAV server** so contacts stay in sync with your phone's native contacts app — see [Contacts & CardDAV sync](#contacts--carddav-sync)
+- Contacts: import/export `.vcf` (vCard) or `.csv` files, multi-select with a bulk-action bar (favorite/unfavorite/export/delete selected), sort by name or date added
+- **Calendar tab** with a full month-grid view, basic recurring events (daily/weekly/monthly, with an optional end date), and a built-in **CalDAV server** so events sync with your phone's native calendar app — the same server address and login as Contacts sync — see [Calendar & CalDAV sync](#calendar--caldav-sync)
+- Calendar: click a date to open that day's events in a side panel (the month grid shrinks to make room); right-click a date or an event for a quick Add/Edit/Remove menu; import/export `.ics` (iCalendar) files
+- Settings → **How to use SyncMark**: an in-app quick tour plus step-by-step CardDAV/CalDAV sync setup for iOS, Android, Linux, and Windows
 
 ## Screenshots
 
@@ -234,9 +241,43 @@ Two toolbar extensions live under `extensions/` — a quick popup to search, bro
 - **Firefox**: `extensions/firefox_extensions/` — load via `about:debugging` → *Load Temporary Add-on…* (see its own README for details)
 - **Chrome / Edge / other Chromium browsers**: `extensions/chromium_extensions/` — load via `chrome://extensions` → *Load unpacked* (see its own README for details)
 
+## Contacts & CardDAV sync
+
+The **Contacts** tab is a second, independent address book alongside your bookmarks — add, edit, delete, favorite, search, and attach a photo to contacts from the web UI, same as bookmarks. What makes it different is that SyncMark also speaks **CardDAV** (the standard contact-sync protocol), so your phone's native Contacts app can sync with it directly, in both directions.
+
+**Setup** — in Settings → Contacts sync, copy the server address (`http://your-server:3000/dav/` or your HTTPS URL if behind a reverse proxy) and add it as a CardDAV account:
+
+- **iOS**: Settings → Contacts → Accounts → Add Account → Other → Add CardDAV Account. Server = the address from Settings, username/password = your regular SyncMark login.
+- **Android**: stock Android has had no built-in CardDAV setup since Android 5 — install the free [DAVx5](https://www.davx5.com/) app, add an account with the same address and credentials, then turn on contact sync for it under your phone's Accounts settings.
+
+A contact added, edited, or deleted on your phone syncs back to SyncMark (and to any other synced device) the next time that device syncs; the same applies in reverse for changes made in the SyncMark UI.
+
+**How it works**: CardDAV clients authenticate with the same username/password as the web UI, over HTTP Basic Auth (not the session cookie) — there's no separate sync password to manage. The server implements the minimal subset of RFC 6352 that real clients need: principal/address-book discovery, `GET`/`PUT`/`DELETE` on individual vCards, and `REPORT` (`addressbook-multiget`, `addressbook-query`, and incremental `sync-collection`) on the single address book every account gets (`SyncMark Contacts`).
+
+**Known limitation**: only the fields SyncMark's UI models — name, organization, phone numbers, emails, notes, favorite, photo — round-trip. A vCard property outside that set (postal address, birthday, IM handles, etc.) added on a phone is silently dropped the moment that contact syncs to SyncMark; it isn't stored, so it won't come back on a later sync either.
+
+**Manual import/export**: Settings → Contacts (and the Contacts page toolbar) lets you import a `.vcf` (vCard) or `.csv` file, or export every contact as either — useful for one-off transfers or backups outside of CardDAV. CSV import accepts SyncMark's own export format (`First Name, Last Name, Organization, Phones, Emails, Notes, Favorite`, with multiple phones/emails packed into one cell as `type:value; type:value`) plus a few common alternate headers from other address books (`Given Name`/`Family Name`, `Company`, a plain `Name` column, etc.). The Contacts page itself also supports multi-select (checkboxes + "select all") with a bulk-action bar to favorite, unfavorite, export, or delete several contacts at once, and "Export selected" for just the checked ones.
+
+## Calendar & CalDAV sync
+
+The **Calendar** tab works the same way, for events instead of contacts: a full month-grid view, and a built-in **CalDAV server** so your phone's native Calendar app can sync with it directly.
+
+**Using the grid**: click a date to open that day's events in a panel on the right (the month grid shrinks to make room) — click an event there to edit it, or use the panel's "Add event on this day" button. Right-click a date, an event pill in the grid, or an event in the side panel for a quick context menu (Add, or Edit/Remove) without opening the full editor.
+
+**Setup**: CalDAV uses the **same server address and login as CardDAV** (Settings → Contacts sync shows it) — a combined CalDAV+CardDAV client discovers both from one account.
+
+- **iOS**: Settings → Calendar → Accounts → Add Account → Other → Add CalDAV Account. Same server address and SyncMark username/password as Contacts sync.
+- **Android**: the same [DAVx5](https://www.davx5.com/) account used for contacts also handles calendar sync — enable it under your phone's Accounts settings.
+
+**Recurring events**: the event editor supports basic recurrence — daily, weekly, or monthly, with an optional end date — stored and synced as a standard iCalendar `RRULE`. There's one event row per series (no per-occurrence editing or exceptions): editing or deleting a recurring event acts on the whole series, and a recurrence is expanded into the individual days it lands on entirely in the browser (the CalDAV server itself, like the CardDAV one, returns the raw series rather than expanding occurrences server-side).
+
+**Known limitations**: no timezone database — times are stored and synced in UTC (or as a bare date for all-day events), so there's no `VTIMEZONE` support; an iCalendar property outside title/description/location/start/end/recurrence (alarms, attendees, etc.) is silently dropped on sync, same precedent as CardDAV's unmodeled vCard fields; multi-day events are shown as a repeated pill on each day they cover rather than a single spanning bar.
+
+**Manual import/export**: Settings → Calendar lets you import an `.ics` file (one or many events) or export the whole calendar as one.
+
 ## API
 
-All `/api/*` routes below except the `/api/auth/*` ones require a valid session cookie (401 otherwise). Static files (the HTML/CSS/JS themselves) are always public — they're what render the sign-in screen.
+All `/api/*` routes below except the `/api/auth/*` ones require a valid session cookie (401 otherwise). Static files (the HTML/CSS/JS themselves) are always public — they're what render the sign-in screen. The CardDAV server at `/dav/` (and the `/.well-known/carddav` redirect to it) is separate from `/api` and uses HTTP Basic Auth instead of the session cookie — see [Contacts & CardDAV sync](#contacts--carddav-sync).
 
 | Method | Path                  | Description                                       |
 | ------ | --------------------- | -------------------------------------------------- |
@@ -266,6 +307,27 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | PUT    | `/api/folders`        | Rename a folder (`{ oldName, newName }`), cascades to subfolders |
 | DELETE | `/api/folders`        | Delete a folder (`{ name }`); its bookmarks become unfiled |
 | PUT    | `/api/folders/reorder`| Set a folder's sidebar position between siblings (`{ name, beforeName, afterName }`) |
-| GET    | `/api/stats`          | Total bookmark and folder counts                     |
+| GET    | `/api/stats`          | Total bookmark, folder, contact, and event counts     |
+| GET    | `/api/contacts`       | List contacts (`?q=` search over name/org/phone/email, `?favorite=1` favorites only, `?sort=name-asc\|name-desc\|created-asc\|created-desc`) |
+| POST   | `/api/contacts`       | Add a contact (`firstName`, `lastName`, `organization`, `phones[]`, `emails[]`, `notes`, `favorite`) |
+| GET    | `/api/contacts/export` | Download every contact (or `?ids=1,2,3` for a selection) as one `.vcf` file, or `.csv` with `?format=csv` |
+| POST   | `/api/contacts/import` | Upload a `.vcf` or `.csv` file (multipart, field `file`) — format is sniffed from the filename/content, one or many contacts |
+| POST   | `/api/contacts/bulk`  | Bulk action on selected contacts (`{ ids: number[], action: "delete"\|"favorite"\|"unfavorite" }`) |
+| GET    | `/api/contacts/:id`   | Get a single contact                                 |
+| PUT    | `/api/contacts/:id`   | Update a contact                                     |
+| DELETE | `/api/contacts/:id`   | Remove a contact                                     |
+| DELETE | `/api/contacts/all`   | Remove every contact                                 |
+| PUT    | `/api/contacts/:id/favorite` | Set favorite status (`{ favorite: true\|false }`) |
+| GET    | `/api/contacts/:id/photo` | The contact's photo bytes (404 if none set)      |
+| POST   | `/api/contacts/:id/photo` | Upload a contact photo (multipart, field `photo`; PNG/JPEG/GIF/WebP, ≤ 2 MB) |
+| DELETE | `/api/contacts/:id/photo` | Remove a contact's photo                         |
+| GET    | `/api/events`         | List events (`?q=` search over title/location/description) — recurrence is returned as a raw `RRULE`, not expanded |
+| POST   | `/api/events`         | Add an event (`title`, `description`, `location`, `startAt`, `endAt`, `allDay`, `recurrence: { freq: "daily"\|"weekly"\|"monthly", until }`) |
+| GET    | `/api/events/export`  | Download every event as one `.ics` file              |
+| POST   | `/api/events/import`  | Upload an `.ics` file (multipart, field `file`) — one or many events |
+| GET    | `/api/events/:id`     | Get a single event                                   |
+| PUT    | `/api/events/:id`     | Update an event (editing a recurring event updates the whole series) |
+| DELETE | `/api/events/:id`     | Remove an event (deletes the whole series if recurring) |
+| DELETE | `/api/events/all`     | Remove every event                                   |
 
 Favicons are rendered client-side via Google's public favicon service (`s2/favicons`), based on each bookmark's domain — no favicon data is stored server-side. Theme and default view preferences are stored in the browser's `localStorage`.

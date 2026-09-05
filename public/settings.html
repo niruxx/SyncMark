@@ -21,6 +21,8 @@
         </a>
         <nav class="nav">
           <a href="index.html">Bookmarks</a>
+          <a href="contacts.html">Contacts</a>
+          <a href="calendar.html">Calendar</a>
           <a href="settings.html" class="active">Settings</a>
         </nav>
       </div>
@@ -47,6 +49,64 @@
 
     <div class="layout">
       <main class="content settings-page">
+        <section class="settings-section">
+          <h2>How to use SyncMark</h2>
+          <p class="settings-hint">A quick tour, plus step-by-step setup for syncing your contacts and calendar to a phone or computer.</p>
+
+          <h3 class="howto-subhead">Using the app</h3>
+          <ol class="howto-steps">
+            <li><strong>Bookmarks</strong> — add one manually with "Add bookmark", organize them into folders from the sidebar, drag to reorder or move between folders, and search or sort from the toolbar. Import an existing browser export from Settings → Import bookmarks, below.</li>
+            <li><strong>Contacts</strong> — works the same way for people: add, edit, delete, and star favorites. Use the checkboxes to multi-select several contacts for a bulk action (favorite, export, or delete), and import/export <code>.vcf</code> or <code>.csv</code> files from the toolbar or Settings.</li>
+            <li><strong>Calendar</strong> — shows a month view. Click a date to open that day's events in the side panel (the calendar shrinks to make room); right-click a date or an event for a quick Add/Edit/Remove menu without opening the full editor.</li>
+            <li><strong>Account</strong> — click your name (top right) to reach account settings or sign out from anywhere.</li>
+            <li><strong>Settings</strong> (this page) — theme, session length, import/export for all three tabs, sync setup, and library stats.</li>
+          </ol>
+
+          <h3 class="howto-subhead">Setting up sync on your devices</h3>
+          <p class="settings-hint">Contacts and Calendar both sync over the same CardDAV/CalDAV server address (shown further down this page, under Contacts sync) using your regular SyncMark username and password — no separate sync password to manage. Expand your device below.</p>
+
+          <details class="howto-details">
+            <summary>iOS (iPhone / iPad)</summary>
+            <ol>
+              <li>Open the <strong>Settings</strong> app on your device.</li>
+              <li>For contacts: <strong>Contacts → Accounts → Add Account → Other → Add CardDAV Account.</strong> For calendar: <strong>Calendar → Accounts → Add Account → Other → Add CalDAV Account.</strong></li>
+              <li><strong>Server:</strong> paste the address from "Server address" below (e.g. <code>https://your-server/dav/</code>).</li>
+              <li><strong>Username / Password:</strong> your SyncMark login.</li>
+              <li>Tap Next, then Save — iOS verifies the account and starts syncing (give it a few seconds the first time).</li>
+            </ol>
+          </details>
+
+          <details class="howto-details">
+            <summary>Android</summary>
+            <ol>
+              <li>Install <a href="https://www.davx5.com/" target="_blank" rel="noopener">DAVx5</a> (F-Droid or Play Store) — stock Android has no built-in CardDAV/CalDAV setup.</li>
+              <li>Open DAVx5 → tap <strong>+</strong> → <strong>Login with URL and username</strong>.</li>
+              <li><strong>Base URL:</strong> the server address below. <strong>Username / password:</strong> your SyncMark login.</li>
+              <li>DAVx5 discovers both the address book and calendar automatically — enable the ones you want to sync.</li>
+              <li>In Android's own Settings → Accounts, confirm contact and calendar sync are turned on for the DAVx5 account, and that your Contacts/Calendar apps are set to display it.</li>
+            </ol>
+          </details>
+
+          <details class="howto-details">
+            <summary>Linux</summary>
+            <ol>
+              <li><strong>GNOME:</strong> Settings → Online Accounts → Add Account → CardDAV / CalDAV, then enter the server address and your SyncMark login. GNOME Contacts, GNOME Calendar, and Evolution pick it up automatically.</li>
+              <li><strong>KDE:</strong> System Settings → Online Accounts (or add a CardDAV/CalDAV resource directly from Kontact/KAddressBook/KOrganizer's account settings) with the same address and login.</li>
+              <li><strong>Any distro, via Thunderbird:</strong> Address Book → File → New → CardDAV Address Book; Calendar → New Calendar → On the Network → format CalDAV. Same server address and login either way.</li>
+            </ol>
+          </details>
+
+          <details class="howto-details">
+            <summary>Windows</summary>
+            <ol>
+              <li>Windows' built-in Mail/Calendar/People apps only support Exchange, Google, iCloud, and Outlook.com accounts — not a generic CardDAV/CalDAV server — so they can't point at SyncMark directly.</li>
+              <li>Install <a href="https://www.thunderbird.net/" target="_blank" rel="noopener">Thunderbird</a> instead: Address Book → File → New → CardDAV Address Book; Calendar → New Calendar → On the Network → format CalDAV.</li>
+              <li>Server address and login: same as below.</li>
+              <li>Or skip sync entirely and just use the Contacts/Calendar tabs in the browser — nothing extra needed for single-device use.</li>
+            </ol>
+          </details>
+        </section>
+
         <section class="settings-section">
           <h2>Appearance</h2>
           <div class="settings-row">
@@ -86,11 +146,20 @@
         </section>
 
         <section class="settings-section">
-          <h2>Import</h2>
+          <h2>Import bookmarks</h2>
           <p class="settings-hint">Import bookmarks from a browser export — a Netscape-format HTML file, or a JSON export (Chrome's <code>Bookmarks</code> file, Firefox's JSON backup, or a plain <code>{title, url}[]</code> array). Folder structure is preserved.</p>
           <div class="settings-row">
             <label class="button secondary" for="import-file">Choose file to import</label>
             <input type="file" id="import-file" accept=".html,.htm,.json" hidden />
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Export bookmarks</h2>
+          <p class="settings-hint">Download every bookmark as a browser-importable HTML file, or as JSON for backup/portability.</p>
+          <div class="export-actions">
+            <a class="button secondary" href="/api/export?format=html" download>Export HTML</a>
+            <a class="button secondary" href="/api/export?format=json" download>Export JSON</a>
           </div>
         </section>
 
@@ -105,16 +174,74 @@
               <span class="stat-value" id="stat-folders">–</span>
               <span class="stat-label">Folders</span>
             </div>
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-contacts">–</span>
+              <span class="stat-label">Contacts</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-events">–</span>
+              <span class="stat-label">Events</span>
+            </div>
           </div>
         </section>
 
         <section class="settings-section">
-          <h2>Export</h2>
-          <p class="settings-hint">Download every bookmark as a browser-importable HTML file, or as JSON for backup/portability.</p>
-          <div class="export-actions">
-            <a class="button secondary" href="/api/export?format=html" download>Export HTML</a>
-            <a class="button secondary" href="/api/export?format=json" download>Export JSON</a>
+          <h2>Contacts</h2>
+          <p class="settings-hint">Import contacts from a <code>.vcf</code> (vCard) or <code>.csv</code> file, or export every contact as either for backup/portability.</p>
+          <div class="settings-row">
+            <label class="button secondary" for="import-contacts-file-settings">Choose file to import</label>
+            <input type="file" id="import-contacts-file-settings" accept=".vcf,.csv" hidden />
           </div>
+          <div class="export-actions">
+            <a class="button secondary" href="/api/contacts/export" download>Export .vcf</a>
+            <a class="button secondary" href="/api/contacts/export?format=csv" download>Export .csv</a>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Contacts sync (CardDAV)</h2>
+          <p class="settings-hint">
+            Point your phone's Contacts app at this address to sync SyncMark contacts in both directions — add, edit,
+            or delete a contact on your phone and it shows up here, and vice versa. Sign in with your regular
+            SyncMark username and password.
+          </p>
+          <div class="settings-row">
+            <label for="dav-url-input">Server address</label>
+            <input type="text" id="dav-url-input" class="settings-copy-field" readonly />
+          </div>
+          <p class="settings-hint">
+            <strong>iOS:</strong> Settings → Contacts → Accounts → Add Account → Other → Add CardDAV Account —
+            paste the address above as the server, and your SyncMark username/password.<br />
+            <strong>Android:</strong> stock Android has no built-in CardDAV setup — install the free
+            <a href="https://www.davx5.com/" target="_blank" rel="noopener">DAVx5</a> app, add an account with the
+            address above, then enable contact sync for it in your phone's Accounts settings.
+          </p>
+        </section>
+
+        <section class="settings-section">
+          <h2>Calendar</h2>
+          <p class="settings-hint">Import events from an <code>.ics</code> (iCalendar) file, or export the whole calendar as one for backup/portability.</p>
+          <div class="settings-row">
+            <label class="button secondary" for="import-events-file">Import .ics file</label>
+            <input type="file" id="import-events-file" accept=".ics" hidden />
+          </div>
+          <div class="export-actions">
+            <a class="button secondary" href="/api/events/export" download>Export all events</a>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Calendar sync (CalDAV)</h2>
+          <p class="settings-hint">
+            Uses the <strong>same server address as Contacts sync above</strong> — one address and one login drive
+            both. Point your phone's Calendar app at it to sync SyncMark events in both directions.
+          </p>
+          <p class="settings-hint">
+            <strong>iOS:</strong> Settings → Calendar → Accounts → Add Account → Other → Add CalDAV Account — same
+            server address and SyncMark username/password as Contacts sync.<br />
+            <strong>Android:</strong> the same <a href="https://www.davx5.com/" target="_blank" rel="noopener">DAVx5</a>
+            account used for contacts also handles calendar sync — enable it in your phone's Accounts settings.
+          </p>
         </section>
 
         <section class="settings-section">

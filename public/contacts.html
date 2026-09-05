@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contacts — SyncMark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div id="app-shell" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <a class="brand" href="index.html">
+          <span class="material-symbols-outlined brand-icon">bookmarks</span>
+          <h1>SyncMark</h1>
+        </a>
+        <nav class="nav">
+          <a href="index.html">Bookmarks</a>
+          <a href="contacts.html" class="active">Contacts</a>
+          <a href="calendar.html">Calendar</a>
+          <a href="settings.html">Settings</a>
+        </nav>
+      </div>
+
+      <div class="topbar-search">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="search" id="search-input" placeholder="Search your contacts" />
+      </div>
+
+      <div class="topbar-actions">
+        <button id="add-contact-btn" class="button">
+          <span class="material-symbols-outlined">person_add</span>
+          Add contact
+        </button>
+        <div class="account-menu">
+          <button type="button" class="account-btn" id="account-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="account-icon material-symbols-outlined">person</span>
+            <span id="account-username">Account</span>
+            <span class="material-symbols-outlined account-caret">expand_more</span>
+          </button>
+          <div class="account-dropdown" id="account-dropdown">
+            <a href="account.html" class="account-dropdown-item">
+              <span class="material-symbols-outlined">manage_accounts</span>
+              Account settings
+            </a>
+            <button type="button" class="account-dropdown-item danger" id="account-sign-out-btn">
+              <span class="material-symbols-outlined">logout</span>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>Contacts</h2>
+        </div>
+        <ul id="contact-filter-list">
+          <li><button class="folder-btn active" id="all-contacts-btn" data-filter="all">
+            <span class="material-symbols-outlined">contacts</span>
+            <span class="folder-label">All contacts</span>
+          </button></li>
+          <li class="favorites-entry"><button class="folder-btn" id="favorites-btn" data-filter="favorites">
+            <span class="material-symbols-outlined">star</span>
+            <span class="folder-label">Favorites</span>
+          </button></li>
+        </ul>
+      </aside>
+
+      <main class="content">
+        <div class="toolbar">
+          <select class="sort-select" id="sort-select" title="Sort">
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+            <option value="created-desc">Newest first</option>
+            <option value="created-asc">Oldest first</option>
+          </select>
+          <label class="button secondary" for="import-contacts-file">
+            <span class="material-symbols-outlined">upload_file</span>
+            Import
+          </label>
+          <input type="file" id="import-contacts-file" accept=".vcf,.csv" hidden />
+          <a class="button secondary" href="/api/contacts/export" download>
+            <span class="material-symbols-outlined">download</span>
+            Export .vcf
+          </a>
+          <a class="button secondary" href="/api/contacts/export?format=csv" download>
+            <span class="material-symbols-outlined">download</span>
+            Export .csv
+          </a>
+          <span id="result-count"></span>
+        </div>
+
+        <div class="bulk-action-bar" id="bulk-action-bar" hidden>
+          <span id="bulk-selected-count"></span>
+          <button type="button" id="bulk-favorite-btn" class="secondary">
+            <span class="material-symbols-outlined">star</span>
+            Favorite
+          </button>
+          <button type="button" id="bulk-unfavorite-btn" class="secondary">
+            <span class="material-symbols-outlined">star_outline</span>
+            Unfavorite
+          </button>
+          <button type="button" id="bulk-export-btn" class="secondary">
+            <span class="material-symbols-outlined">download</span>
+            Export selected
+          </button>
+          <button type="button" id="bulk-delete-btn" class="danger">
+            <span class="material-symbols-outlined">delete</span>
+            Delete
+          </button>
+          <button type="button" id="bulk-clear-btn" class="secondary">Clear selection</button>
+        </div>
+
+        <table class="contact-table" id="contact-list">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="select-all-checkbox" title="Select all" /></th>
+              <th></th>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th>Organization</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="contact-rows"></tbody>
+        </table>
+
+        <p id="empty-state" class="empty-state" hidden>No contacts yet — add one manually, import a .vcf or .csv file above, or set up CardDAV sync in Settings to bring them in from your phone.</p>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="contact-modal">
+      <div class="modal contact-modal" role="dialog" aria-modal="true" aria-labelledby="contact-modal-heading">
+        <h2 id="contact-modal-heading">Add contact</h2>
+        <form id="contact-form">
+          <div class="avatar-editor contact-photo-editor">
+            <div class="avatar-preview" id="contact-photo-preview">
+              <span class="material-symbols-outlined">person</span>
+            </div>
+            <div class="avatar-actions">
+              <label class="button secondary" for="contact-photo-file">Upload photo</label>
+              <input type="file" id="contact-photo-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+              <button type="button" id="contact-photo-remove-btn" class="secondary" hidden>Remove</button>
+            </div>
+          </div>
+
+          <div class="contact-name-row">
+            <label>
+              First name
+              <input type="text" id="modal-first-name" />
+            </label>
+            <label>
+              Last name
+              <input type="text" id="modal-last-name" />
+            </label>
+          </div>
+
+          <label>
+            Organization
+            <input type="text" id="modal-organization" />
+          </label>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Phone numbers</span>
+            <div id="phone-rows"></div>
+            <button type="button" id="add-phone-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add phone
+            </button>
+          </div>
+
+          <div class="contact-field-group">
+            <span class="contact-field-label">Emails</span>
+            <div id="email-rows"></div>
+            <button type="button" id="add-email-btn" class="secondary contact-add-row-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add email
+            </button>
+          </div>
+
+          <label>
+            Notes
+            <textarea id="modal-notes" rows="3"></textarea>
+          </label>
+
+          <label class="modal-checkbox">
+            <input type="checkbox" id="modal-favorite-input" />
+            Mark as favorite
+          </label>
+
+          <p class="modal-error" id="modal-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="modal-cancel-btn" class="secondary">Cancel</button>
+            <button type="submit" id="modal-save-btn">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="auth.js" data-next="contacts.js"></script>
+</body>
+</html>

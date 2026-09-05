@@ -1541,6 +1541,20 @@ button.danger {
   cursor: pointer;
 }
 
+.settings-copy-field {
+  flex: 1;
+  min-width: 0;
+  max-width: 340px;
+  padding: 0.6rem 1rem;
+  border-radius: var(--corner-full);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-container);
+  color: var(--on-surface);
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+  cursor: text;
+}
+
 .settings-hint {
   color: var(--on-surface-variant);
   font-size: 0.875rem;
@@ -1620,6 +1634,81 @@ button.danger {
   flex-wrap: wrap;
 }
 
+/* ---------- How to use (Settings) ---------- */
+
+.howto-subhead {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--on-surface);
+}
+
+.howto-subhead:first-of-type {
+  margin-top: 0.5rem;
+}
+
+.howto-steps {
+  margin: 0 0 0.5rem;
+  padding-left: 1.25rem;
+  color: var(--on-surface);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.howto-steps li {
+  margin-bottom: 0.5rem;
+}
+
+.howto-details {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--corner-md);
+  padding: 0.15rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.howto-details[open] {
+  padding-bottom: 0.85rem;
+}
+
+.howto-details summary {
+  cursor: pointer;
+  padding: 0.85rem 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--on-surface);
+  list-style: none;
+}
+
+.howto-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.howto-details summary::before {
+  content: 'chevron_right';
+  font-family: 'Material Symbols Outlined';
+  font-size: 20px;
+  display: inline-block;
+  margin-right: 0.5rem;
+  vertical-align: -5px;
+  transition: transform 0.15s var(--ease);
+}
+
+.howto-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.howto-details ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.howto-details li {
+  margin-bottom: 0.4rem;
+}
+
 /* ---------- Settings signature ---------- */
 
 .settings-signature {
@@ -1643,6 +1732,576 @@ button.danger {
   outline: none;
 }
 
+/* ---------- Contacts ---------- */
+
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-radius: var(--corner-lg);
+}
+
+.bulk-action-bar #bulk-selected-count {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.bulk-action-bar button {
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+}
+
+.contact-table tbody tr.is-selected {
+  background: color-mix(in srgb, var(--primary-container) 45%, transparent);
+}
+
+.contact-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--corner-lg);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+  transition: background-color 0.25s var(--ease);
+}
+
+.contact-table th,
+.contact-table td {
+  text-align: left;
+  padding: 0.9rem 0.85rem;
+  border-bottom: 1px solid var(--outline-variant);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-table th:first-child,
+.contact-table td:first-child {
+  width: 2.75rem;
+  padding-left: 1.25rem;
+  padding-right: 0;
+}
+
+.contact-table th:first-child input[type='checkbox'],
+.contact-table td:first-child input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.contact-table th:nth-child(2),
+.contact-table td:nth-child(2) {
+  width: 3rem;
+}
+
+.contact-table th:nth-child(3),
+.contact-table td:nth-child(3) {
+  width: 20%;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.contact-table th:nth-child(4),
+.contact-table td:nth-child(4) { width: 17%; }
+
+.contact-table th:nth-child(5),
+.contact-table td:nth-child(5) { width: 20%; }
+
+.contact-table th:nth-child(6),
+.contact-table td:nth-child(6) { width: 17%; }
+
+.contact-table th:last-child,
+.contact-table td:last-child {
+  width: 15rem;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.contact-table th {
+  color: var(--on-surface-variant);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  background: var(--surface-container-low);
+}
+
+.contact-table tbody tr {
+  animation: itemIn 0.28s var(--ease) both;
+  transition: background-color 0.12s var(--ease);
+}
+
+.contact-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.contact-table tbody tr:hover {
+  background: var(--surface-container-low);
+}
+
+.contact-avatar {
+  border-radius: 50%;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.contact-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.contact-photo-editor .avatar-preview {
+  border-radius: 50%;
+}
+
+.contact-name-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.contact-name-row label {
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-field-group {
+  margin-bottom: 1.25rem;
+}
+
+.contact-field-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--on-surface-variant);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.contact-field-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.contact-field-row select {
+  flex-shrink: 0;
+  width: 6.5rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: inherit;
+  font-size: 0.8125rem;
+}
+
+.contact-field-row input {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--on-surface);
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.contact-field-row input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.contact-field-remove {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+}
+
+.contact-field-remove .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.contact-add-row-btn {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.8125rem;
+}
+
+.contact-modal {
+  max-width: 480px;
+}
+
+.contact-modal textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--on-surface);
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.contact-modal textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+/* ---------- Calendar ---------- */
+
+.calendar-layout .content {
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0 1.25rem;
+  flex-wrap: wrap;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-nav h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 400;
+  min-width: 11ch;
+  text-align: center;
+}
+
+.calendar-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.calendar-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.calendar-day-panel {
+  width: 320px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-radius: var(--corner-lg);
+  box-shadow: var(--elev-1);
+  padding: 1.25rem;
+  position: sticky;
+  top: 5rem;
+  animation: revealDown 0.2s var(--ease) both;
+}
+
+.calendar-day-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.calendar-day-panel-header h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 500;
+}
+
+.calendar-day-panel-add-btn {
+  width: 100%;
+  margin-bottom: 1rem;
+  justify-content: center;
+}
+
+.day-events-empty {
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+  padding: 0.75rem 0.5rem;
+}
+
+.calendar-weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 0 0.25rem 0.5rem;
+}
+
+.calendar-weekday-row span {
+  color: var(--on-surface-variant);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  text-align: center;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: minmax(110px, 1fr);
+  background: var(--surface);
+  border-radius: var(--corner-lg);
+  box-shadow: var(--elev-1);
+  overflow: hidden;
+}
+
+.calendar-day {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  border-right: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--outline-variant);
+  min-width: 0;
+  cursor: pointer;
+  transition: background-color 0.12s var(--ease);
+}
+
+.calendar-day:hover {
+  background: var(--surface-container-low);
+}
+
+.calendar-grid .calendar-day:nth-child(7n) {
+  border-right: none;
+}
+
+.calendar-day-number {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--corner-full);
+  font-size: 0.8125rem;
+  color: var(--on-surface);
+}
+
+.calendar-day.is-other-month .calendar-day-number {
+  color: var(--on-surface-variant);
+  opacity: 0.5;
+}
+
+.calendar-day.is-today .calendar-day-number {
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+}
+
+.calendar-day.is-selected-day {
+  background: color-mix(in srgb, var(--primary-container) 35%, transparent);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.calendar-day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.calendar-event-pill {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border: none;
+  border-radius: var(--corner-xs);
+  padding: 0.15rem 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.calendar-event-pill:hover {
+  filter: brightness(1.08);
+  box-shadow: none;
+}
+
+.calendar-day-more {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--on-surface-variant);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.1rem 0.25rem;
+  cursor: pointer;
+}
+
+.calendar-day-more:hover {
+  color: var(--primary);
+  box-shadow: none;
+  filter: none;
+}
+
+.day-events-list {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.day-events-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.5rem;
+  border-radius: var(--corner-sm);
+  cursor: pointer;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.day-events-item:hover {
+  background: var(--surface-container-low);
+}
+
+.day-events-time {
+  color: var(--on-surface-variant);
+  font-size: 0.75rem;
+  min-width: 4.5rem;
+  flex-shrink: 0;
+}
+
+.day-events-title {
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-modal {
+  max-width: 500px;
+}
+
+.event-modal textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--on-surface);
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.event-modal textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.event-modal select {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--corner-xs);
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.modal-actions-spacer {
+  flex: 1;
+}
+
+/* ---------- Context menu (calendar right-click) ---------- */
+
+.context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 180px;
+  background: var(--surface-container-high);
+  border-radius: var(--corner-md);
+  box-shadow: var(--elev-3);
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  animation: revealDown 0.12s var(--ease) both;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--corner-sm);
+  background: transparent;
+  color: var(--on-surface);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.context-menu-item:hover {
+  background: var(--surface-container-highest);
+  box-shadow: none;
+  filter: none;
+}
+
+.context-menu-item .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.context-menu-item.danger {
+  color: var(--error);
+}
+
+.context-menu-item.danger:hover {
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 1000px) {
@@ -1663,6 +2322,15 @@ button.danger {
     width: 100%;
     position: static;
   }
+
+  .calendar-body {
+    flex-direction: column;
+  }
+
+  .calendar-day-panel {
+    width: 100%;
+    position: static;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1672,5 +2340,13 @@ button.danger {
 
   .topbar h1 {
     font-size: 1.15rem;
+  }
+
+  .calendar-grid {
+    grid-auto-rows: minmax(72px, 1fr);
+  }
+
+  .calendar-day-number {
+    font-size: 0.75rem;
   }
 }

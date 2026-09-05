@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calendar — SyncMark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div id="app-shell" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <a class="brand" href="index.html">
+          <span class="material-symbols-outlined brand-icon">bookmarks</span>
+          <h1>SyncMark</h1>
+        </a>
+        <nav class="nav">
+          <a href="index.html">Bookmarks</a>
+          <a href="contacts.html">Contacts</a>
+          <a href="calendar.html" class="active">Calendar</a>
+          <a href="settings.html">Settings</a>
+        </nav>
+      </div>
+
+      <div class="topbar-search">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="search" id="search-input" placeholder="Search your events" />
+      </div>
+
+      <div class="topbar-actions">
+        <button id="add-event-btn" class="button">
+          <span class="material-symbols-outlined">add</span>
+          Add event
+        </button>
+        <div class="account-menu">
+          <button type="button" class="account-btn" id="account-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="account-icon material-symbols-outlined">person</span>
+            <span id="account-username">Account</span>
+            <span class="material-symbols-outlined account-caret">expand_more</span>
+          </button>
+          <div class="account-dropdown" id="account-dropdown">
+            <a href="account.html" class="account-dropdown-item">
+              <span class="material-symbols-outlined">manage_accounts</span>
+              Account settings
+            </a>
+            <button type="button" class="account-dropdown-item danger" id="account-sign-out-btn">
+              <span class="material-symbols-outlined">logout</span>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout calendar-layout">
+      <main class="content">
+        <div class="calendar-toolbar">
+          <div class="calendar-nav">
+            <button type="button" id="cal-prev-btn" class="icon-btn" title="Previous month">
+              <span class="material-symbols-outlined">chevron_left</span>
+            </button>
+            <h2 id="cal-month-label">Month YYYY</h2>
+            <button type="button" id="cal-next-btn" class="icon-btn" title="Next month">
+              <span class="material-symbols-outlined">chevron_right</span>
+            </button>
+          </div>
+          <button type="button" id="cal-today-btn" class="secondary">Today</button>
+        </div>
+
+        <div class="calendar-body">
+          <div class="calendar-main" id="calendar-main">
+            <div class="calendar-weekday-row">
+              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+
+            <div class="calendar-grid" id="calendar-grid"></div>
+          </div>
+
+          <aside class="calendar-day-panel" id="calendar-day-panel" hidden>
+            <div class="calendar-day-panel-header">
+              <h2 id="calendar-day-panel-heading">Date</h2>
+              <button type="button" class="icon-btn" id="calendar-day-panel-close-btn" title="Close">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <button type="button" class="button secondary calendar-day-panel-add-btn" id="calendar-day-panel-add-btn">
+              <span class="material-symbols-outlined">add</span>
+              Add event on this day
+            </button>
+            <ul class="day-events-list" id="calendar-day-panel-list"></ul>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="event-modal">
+      <div class="modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-modal-heading">
+        <h2 id="event-modal-heading">Add event</h2>
+        <form id="event-form">
+          <label>
+            Title
+            <input type="text" id="event-title-input" required />
+          </label>
+
+          <label class="modal-checkbox">
+            <input type="checkbox" id="event-allday-input" />
+            All day
+          </label>
+
+          <div class="contact-name-row">
+            <label id="event-start-label">
+              Starts
+              <input type="datetime-local" id="event-start-input" required />
+            </label>
+            <label id="event-end-label">
+              Ends
+              <input type="datetime-local" id="event-end-input" required />
+            </label>
+          </div>
+
+          <label>
+            Location
+            <input type="text" id="event-location-input" />
+          </label>
+
+          <label>
+            Description
+            <textarea id="event-description-input" rows="3"></textarea>
+          </label>
+
+          <div class="contact-name-row">
+            <label>
+              Repeat
+              <select id="event-repeat-input">
+                <option value="">Does not repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </label>
+            <label id="event-repeat-until-label" hidden>
+              Ends on
+              <input type="date" id="event-repeat-until-input" />
+            </label>
+          </div>
+
+          <p class="modal-error" id="event-modal-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="event-delete-btn" class="danger" hidden>Delete</button>
+            <span class="modal-actions-spacer"></span>
+            <button type="button" id="event-cancel-btn" class="secondary">Cancel</button>
+            <button type="submit" id="event-save-btn">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="auth.js" data-next="calendar.js"></script>
+</body>
+</html>

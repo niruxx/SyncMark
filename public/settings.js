@@ -2,8 +2,13 @@ const themeSelect = document.getElementById('theme-select');
 const viewSelect = document.getElementById('default-view-select');
 const statTotal = document.getElementById('stat-total');
 const statFolders = document.getElementById('stat-folders');
+const statContacts = document.getElementById('stat-contacts');
+const statEvents = document.getElementById('stat-events');
+const davUrlInput = document.getElementById('dav-url-input');
 const clearAllBtn = document.getElementById('clear-all-btn');
 const importFile = document.getElementById('import-file');
+const importContactsFile = document.getElementById('import-contacts-file-settings');
+const importEventsFile = document.getElementById('import-events-file');
 const sessionDurationSelect = document.getElementById('session-duration-select');
 const signOutBtn = document.getElementById('sign-out-btn');
 const accountUsernameEl = document.getElementById('account-username');
@@ -51,11 +56,18 @@ async function loadStats() {
     const stats = await api('/stats');
     statTotal.textContent = stats.total;
     statFolders.textContent = stats.folderCount;
+    statContacts.textContent = stats.contactTotal;
+    statEvents.textContent = stats.eventTotal;
   } catch {
     statTotal.textContent = '–';
     statFolders.textContent = '–';
+    statContacts.textContent = '–';
+    statEvents.textContent = '–';
   }
 }
+
+davUrlInput.value = `${location.origin}/dav/`;
+davUrlInput.addEventListener('click', () => davUrlInput.select());
 
 async function loadSessionDuration() {
   try {
@@ -161,6 +173,42 @@ importFile.addEventListener('change', async () => {
     showToast(`Import failed: ${err.message}`, 'error');
   } finally {
     importFile.value = '';
+  }
+});
+
+importContactsFile.addEventListener('change', async () => {
+  const file = importContactsFile.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const result = await api('/contacts/import', { method: 'POST', body: formData });
+    showToast(`Imported ${result.imported} contact${result.imported === 1 ? '' : 's'}`, 'success');
+    await loadStats();
+  } catch (err) {
+    showToast(`Import failed: ${err.message}`, 'error');
+  } finally {
+    importContactsFile.value = '';
+  }
+});
+
+importEventsFile.addEventListener('change', async () => {
+  const file = importEventsFile.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const result = await api('/events/import', { method: 'POST', body: formData });
+    showToast(`Imported ${result.imported} event${result.imported === 1 ? '' : 's'}`, 'success');
+    await loadStats();
+  } catch (err) {
+    showToast(`Import failed: ${err.message}`, 'error');
+  } finally {
+    importEventsFile.value = '';
   }
 });
 

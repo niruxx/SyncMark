@@ -24,7 +24,9 @@ router.get('/bookmarks', (req, res) => {
 
 router.get('/stats', (req, res) => {
   const { count } = statements.countBookmarks.get();
-  res.json({ total: count, folderCount: listMergedFolders().length });
+  const { count: contactCount } = statements.countContacts.get();
+  const { count: eventCount } = statements.countEvents.get();
+  res.json({ total: count, folderCount: listMergedFolders().length, contactTotal: contactCount, eventTotal: eventCount });
 });
 
 router.get('/export', (req, res) => {
