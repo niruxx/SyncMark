@@ -190,14 +190,17 @@ function renderRows() {
     tr.appendChild(iconTd);
 
     const nameTd = document.createElement('td');
+    nameTd.dataset.label = 'Name';
     nameTd.textContent = entry.name;
     tr.appendChild(nameTd);
 
     const sizeTd = document.createElement('td');
+    sizeTd.dataset.label = 'Size';
     sizeTd.textContent = entry.type === 'dir' ? '—' : formatBytes(entry.size);
     tr.appendChild(sizeTd);
 
     const modifiedTd = document.createElement('td');
+    modifiedTd.dataset.label = 'Modified';
     modifiedTd.textContent = formatModified(entry.modifiedAt);
     tr.appendChild(modifiedTd);
 

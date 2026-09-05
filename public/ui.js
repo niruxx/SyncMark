@@ -324,11 +324,156 @@
     }
   }
 
+  /* Mobile nav: injects a hamburger button before .nav so the 5 top-level
+     links collapse into a dropdown below the mobile breakpoint instead of
+     wrapping in place — CSS (.mobile-nav-toggle / .nav.nav-open) does the
+     rest. No-ops harmlessly if .nav isn't on the page. */
+  function initMobileNav() {
+    const nav = document.querySelector('.nav');
+    const topbarLeft = document.querySelector('.topbar-left');
+    if (!nav || !topbarLeft) return;
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'icon-btn mobile-nav-toggle';
+    toggle.setAttribute('aria-label', 'Menu');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.innerHTML = '<span class="material-symbols-outlined">menu</span>';
+    topbarLeft.insertBefore(toggle, nav);
+
+    function closeNav() {
+      nav.classList.remove('nav-open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = nav.classList.toggle('nav-open');
+      toggle.setAttribute('aria-expanded', String(isOpen));
+    });
+    nav.addEventListener('click', (e) => {
+      if (e.target.closest('a')) closeNav();
+    });
+    document.addEventListener('click', (e) => {
+      if (nav.classList.contains('nav-open') && !nav.contains(e.target) && e.target !== toggle) closeNav();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeNav();
+    });
+  }
+
+  /* Mobile sidebar drawer: only runs on pages with a .sidebar (Bookmarks/
+     Contacts/Files — not Calendar or Settings). Injects a toggle button at
+     the top of .content, labeled from the sidebar's own heading, plus a
+     backdrop appended to body. CSS (.sidebar.is-open / .sidebar-backdrop)
+     does the actual slide-in. */
+  function initSidebarDrawer() {
+    const sidebar = document.querySelector('.sidebar');
+    const content = document.querySelector('.content');
+    if (!sidebar || !content) return;
+
+    const label = sidebar.querySelector('.sidebar-header h2')?.textContent || 'Menu';
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'sidebar-backdrop';
+    document.body.appendChild(backdrop);
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'button secondary mobile-sidebar-toggle';
+    toggle.innerHTML = `<span class="material-symbols-outlined">menu</span>${label}`;
+    content.insertBefore(toggle, content.firstChild);
+
+    function closeSidebar() {
+      sidebar.classList.remove('is-open');
+      backdrop.classList.remove('is-open');
+      document.body.classList.remove('sidebar-drawer-open');
+    }
+
+    toggle.addEventListener('click', () => {
+      sidebar.classList.add('is-open');
+      backdrop.classList.add('is-open');
+      document.body.classList.add('sidebar-drawer-open');
+    });
+    backdrop.addEventListener('click', closeSidebar);
+    sidebar.addEventListener('click', (e) => {
+      const target = e.target.closest('a, button');
+      // "Manage folders"/"Manage groups" open their own modal on top of the
+      // drawer — closing the drawer out from under that modal would be
+      // jarring, so only real navigation (everything else) closes it.
+      if (!target || target.id === 'manage-folders-btn' || target.id === 'manage-groups-btn') return;
+      closeSidebar();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeSidebar();
+    });
+  }
+
+  /* Long-press → context menu: calendar.js and files.js already listen for
+     the "contextmenu" event (not a mouse-specific one), so synthesizing that
+     same event after a touch-and-hold makes their existing quick-action
+     menus work on touch with zero changes to either file. */
+  function initLongPressContextMenu() {
+    const HOLD_MS = 500;
+    const MOVE_TOLERANCE = 10;
+    let timer = null;
+    let start = null;
+
+    function cancel() {
+      clearTimeout(timer);
+      timer = null;
+      start = null;
+    }
+
+    document.addEventListener(
+      'touchstart',
+      (e) => {
+        if (e.touches.length !== 1) return cancel();
+        const touch = e.touches[0];
+        start = { x: touch.clientX, y: touch.clientY, target: e.target };
+        timer = setTimeout(() => {
+          if (!start) return;
+          const target = document.elementFromPoint(start.x, start.y) || start.target;
+          target.dispatchEvent(
+            new MouseEvent('contextmenu', {
+              bubbles: true,
+              cancelable: true,
+              clientX: start.x,
+              clientY: start.y,
+            })
+          );
+          cancel();
+        }, HOLD_MS);
+      },
+      { passive: true }
+    );
+
+    document.addEventListener(
+      'touchmove',
+      (e) => {
+        if (!start) return;
+        const touch = e.touches[0];
+        if (Math.abs(touch.clientX - start.x) > MOVE_TOLERANCE || Math.abs(touch.clientY - start.y) > MOVE_TOLERANCE) cancel();
+      },
+      { passive: true }
+    );
+
+    document.addEventListener('touchend', cancel, { passive: true });
+    document.addEventListener('touchcancel', cancel, { passive: true });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initAccountMenu);
+    document.addEventListener('DOMContentLoaded', () => {
+      initAccountMenu();
+      initMobileNav();
+      initSidebarDrawer();
+    });
   } else {
     initAccountMenu();
+    initMobileNav();
+    initSidebarDrawer();
   }
+  initLongPressContextMenu();
 
   /* Global page-load fade-in: once #app-shell becomes visible (either right
      away, for an already-signed-in reload, or after auth.js reveals it),
@@ -337,7 +482,12 @@
   function applyContentFadeIn() {
     const shell = document.getElementById('app-shell');
     if (!shell) return;
-    const targets = shell.querySelectorAll('.topbar, .sidebar, .content > *');
+    // .sidebar is deliberately excluded: on mobile it's a drawer positioned
+    // via `transform` (closed by default), and this fade-in's own
+    // translateY animation — with fill-mode "both" — would permanently
+    // override that transform once the animation ends, leaving the drawer
+    // stuck open with no way to close it.
+    const targets = shell.querySelectorAll('.topbar, .content > *');
     targets.forEach((el, i) => {
       el.classList.add('content-fade-in');
       el.style.animationDelay = `${Math.min(i * 40, 200)}ms`;

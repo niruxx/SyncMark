@@ -307,6 +307,7 @@ function renderContacts() {
     tr.appendChild(avatarTd);
 
     const nameTd = document.createElement('td');
+    nameTd.dataset.label = 'Name';
     nameTd.textContent = contact.full_name;
     for (const tag of tags.slice(0, 2)) {
       const pill = document.createElement('span');
@@ -317,14 +318,17 @@ function renderContacts() {
     tr.appendChild(nameTd);
 
     const phoneTd = document.createElement('td');
+    phoneTd.dataset.label = 'Phone';
     phoneTd.textContent = phones[0]?.value || '';
     tr.appendChild(phoneTd);
 
     const emailTd = document.createElement('td');
+    emailTd.dataset.label = 'Email';
     emailTd.textContent = emails[0]?.value || '';
     tr.appendChild(emailTd);
 
     const orgTd = document.createElement('td');
+    orgTd.dataset.label = 'Organization';
     orgTd.textContent = contact.organization || '';
     tr.appendChild(orgTd);
 

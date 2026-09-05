@@ -441,6 +441,7 @@ function renderRow(bookmark) {
   tr.appendChild(iconTd);
 
   const titleTd = document.createElement('td');
+  titleTd.dataset.label = 'Title';
   titleTd.textContent = bookmark.title;
   titleTd.title = 'Double-click to rename';
   titleTd.addEventListener('dblclick', (e) => {
@@ -450,6 +451,7 @@ function renderRow(bookmark) {
   tr.appendChild(titleTd);
 
   const urlTd = document.createElement('td');
+  urlTd.dataset.label = 'URL';
   const link = document.createElement('a');
   link.href = bookmark.url;
   link.target = '_blank';
@@ -461,6 +463,7 @@ function renderRow(bookmark) {
 
   const folderTd = document.createElement('td');
   folderTd.className = 'folder-cell';
+  folderTd.dataset.label = 'Folder';
   folderTd.textContent = bookmark.folder;
   tr.appendChild(folderTd);
 
