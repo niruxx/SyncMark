@@ -22,6 +22,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - [Mobile use](#mobile-use)
 - [Backup & restore](#backup--restore)
 - [API](#api)
+- [AI usage disclaimer](#ai-usage-disclaimer)
 
 ## Features
 
@@ -541,3 +542,9 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | POST   | `/api/backups/:file/restore` | Restore a backup (`{ password }`) — replaces all current data, signs out every device |
 
 Favicons are rendered client-side via Google's public favicon service (`s2/favicons`), based on each bookmark's domain — no favicon data is stored server-side. Theme and default view preferences are stored in the browser's `localStorage`.
+
+## AI usage disclaimer
+
+SyncMark's code, documentation, and design were written substantially with the help of AI coding assistants (Claude, via Claude Code), directed and reviewed by the project's maintainer. It is not "vibe-coded" in the sense of unreviewed, unverified output — every feature has gone through deliberate design discussion, and changes are tested (unit tests where it makes sense, end-to-end checks against a running instance, and manual verification) before being considered done.
+
+That said: this is a personal, self-hosted project maintained by one person, not an audited or professionally-supported product. If you're relying on it for anything sensitive, read the code (it's small enough to), and treat this disclaimer as a prompt to do your own review rather than an assurance that none is needed.
