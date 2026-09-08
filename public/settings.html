@@ -415,15 +415,13 @@
         <section class="settings-section">
           <h2>Automatic backups</h2>
           <p class="settings-hint">
-            A backup is a full snapshot of everything in this SyncMark instance — bookmarks, contacts, calendar,
-            file locations, and settings. Point the directory below at a synced cloud folder (rclone, Dropbox,
-            OneDrive, a network share) to get real off-machine copies; left blank, backups are kept in
+            A backup is a snapshot of this SyncMark instance — including the actual files under any File Manager
+            locations, not just their configured paths. That means backup size and speed scale with however much
+            you keep there. Point the directory below at a synced cloud folder (rclone, Dropbox, OneDrive, a
+            network share) to get real off-machine copies; left blank, backups are kept in
             <code>data/backups</code> on this server.
           </p>
-          <label class="modal-checkbox">
-            <input type="checkbox" id="backup-enabled-toggle" />
-            Back up automatically
-          </label>
+          <button type="button" class="feature-toggle-btn" id="backup-enabled-toggle" aria-pressed="false">Back up automatically</button>
           <div class="settings-row">
             <label for="backup-frequency-select">Frequency</label>
             <select id="backup-frequency-select">
@@ -438,6 +436,17 @@
           <div class="settings-row">
             <label for="backup-dir-input">Backup directory (optional)</label>
             <input type="text" id="backup-dir-input" placeholder="Default: data/backups" />
+          </div>
+          <div>
+            <span class="contact-field-label">What to back up</span>
+            <p class="settings-hint">Applies to both automatic backups and "Back up now" below.</p>
+            <div class="feature-toggle-group" id="backup-modules-group">
+              <button type="button" class="feature-toggle-btn" data-module="bookmarks" aria-pressed="false">Bookmarks</button>
+              <button type="button" class="feature-toggle-btn" data-module="contacts" aria-pressed="false">Contacts</button>
+              <button type="button" class="feature-toggle-btn" data-module="calendar" aria-pressed="false">Calendar</button>
+              <button type="button" class="feature-toggle-btn" data-module="files" aria-pressed="false">Files</button>
+              <button type="button" class="feature-toggle-btn" data-module="account" aria-pressed="false">Account &amp; settings</button>
+            </div>
           </div>
           <p class="modal-error" id="backup-schedule-error" hidden></p>
           <div class="settings-row">
@@ -456,7 +465,7 @@
         </div>
 
         <p class="settings-signature">- niruxxdaboi -</p>
-        <p class="settings-version">Version 1.0.0</p>
+        <p class="settings-version">Version 1.1.0</p>
       </main>
     </div>
 
@@ -499,6 +508,11 @@
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restore-backup-heading">
         <h2 id="restore-backup-heading">Restore backup</h2>
         <p class="settings-hint" id="restore-backup-subtitle">This replaces everything currently in SyncMark with the contents of this backup. There is no undo. Enter your password to confirm.</p>
+        <p class="settings-hint">Files under File Manager locations are added and overwritten from the backup, never deleted — so restoring is safe even if a location has changed since the backup was made.</p>
+        <div>
+          <span class="contact-field-label">What to restore</span>
+          <div class="feature-toggle-group" id="restore-modules-group"></div>
+        </div>
         <form id="restore-backup-form">
           <label>
             Password

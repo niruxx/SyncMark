@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const { statements } = require('../db');
@@ -16,6 +17,46 @@ function validateLocationPath(p) {
   if (!fs.existsSync(p)) return 'Path does not exist on this server';
   if (!fs.statSync(p).isDirectory()) return 'Path is not a directory';
   return null;
+}
+
+// ---------- trash (soft delete) ----------
+// Each location gets its own hidden .trash/<uuid>/ holding the moved item
+// plus a .meta.json recording where it came from — trash has to live inside
+// the location's own sandbox, since it can't reach across locations. A
+// same-volume fs.renameSync moves items in and out instantly regardless of
+// size, same as the existing rename route.
+
+function trashDir(location) {
+  return path.join(location.path, '.trash');
+}
+
+// Reserves ".trash" at a location's root so an upload/mkdir/rename can never
+// collide with (and silently vanish behind) the reserved folder.
+function isTrashRootPath(location, absPath) {
+  return absPath === path.resolve(trashDir(location));
+}
+
+function readTrashEntries(location) {
+  const dir = trashDir(location);
+  if (!fs.existsSync(dir)) return [];
+  const results = [];
+  for (const id of fs.readdirSync(dir)) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, id, '.meta.json'), 'utf8'));
+      let size = 0;
+      try {
+        const stat = fs.statSync(path.join(dir, id, meta.name));
+        size = stat.isDirectory() ? 0 : stat.size;
+      } catch {
+        /* item itself vanished — meta still lets it show up so it can be cleaned up */
+      }
+      results.push({ id, name: meta.name, originalRelPath: meta.originalRelPath, deletedAt: meta.deletedAt, size });
+    } catch {
+      continue; // missing/corrupt sidecar — skip rather than fail the whole list
+    }
+  }
+  results.sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
+  return results;
 }
 
 // ---------- locations ----------
@@ -147,6 +188,7 @@ router.get('/files/browse', (req, res) => {
 
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.name !== '.trash')
     .map((entry) => {
       let stat;
       try {
@@ -189,6 +231,163 @@ router.get('/files/download', (req, res) => {
   res.download(target);
 });
 
+// Deliberately mirrors GET /contacts/:id/photo's inline-serving pattern:
+// a strict extension allowlist (never trust the client), nosniff, and a
+// locked-down CSP — the same stored-XSS-safe recipe for serving
+// user-controlled binary content inline instead of forcing a download.
+const VIEWABLE_MIME = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.ogg': 'video/ogg',
+  '.ogv': 'video/ogg',
+  '.mov': 'video/quicktime',
+};
+
+router.get('/files/view', (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+
+  let target;
+  try {
+    target = resolveSafePath(location.path, req.query.path || '');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (!fs.existsSync(target) || fs.statSync(target).isDirectory()) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  const mime = VIEWABLE_MIME[path.extname(target).toLowerCase()];
+  if (!mime) return res.status(415).json({ error: "This file type can't be viewed inline" });
+
+  res.setHeader('Content-Type', mime);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.setHeader('Cache-Control', 'private, no-cache');
+  // sendFile (not download/plain send) — gets Range-request support for
+  // free, which video playback needs in order to seek.
+  res.sendFile(target);
+});
+
+// ---------- text file editing ----------
+
+const TEXT_MAX_BYTES = 5 * 1024 * 1024;
+
+router.get('/files/text', (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+
+  let target;
+  try {
+    target = resolveSafePath(location.path, req.query.path || '');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (!fs.existsSync(target) || fs.statSync(target).isDirectory()) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  if (fs.statSync(target).size > TEXT_MAX_BYTES) {
+    return res.status(413).json({ error: 'File is too large to edit in the browser (5 MB limit)' });
+  }
+
+  try {
+    res.json({ content: fs.readFileSync(target, 'utf8') });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Raw text/plain body (not JSON — no escaping overhead for large content)
+// with its own scoped size limit, since express.json()'s app-wide default
+// in server.js is far smaller than a text file can reasonably be — same
+// "scope the parser, don't touch the global default" precedent
+// carddav.js/caldav.js already set for their own body parsing.
+router.put('/files/text', express.text({ type: 'text/plain', limit: '6mb' }), (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+
+  let target;
+  try {
+    target = resolveSafePath(location.path, req.query.path || '');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (!fs.existsSync(target) || fs.statSync(target).isDirectory()) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  const content = req.body || '';
+  if (Buffer.byteLength(content, 'utf8') > TEXT_MAX_BYTES) {
+    return res.status(413).json({ error: 'Content is too large to save (5 MB limit)' });
+  }
+
+  try {
+    fs.writeFileSync(target, content, 'utf8');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  res.json({ ok: true });
+});
+
+// ---------- permissions ----------
+// fs.chmod is fully meaningful on POSIX but only really controls the
+// read-only attribute on Windows — the response reports which platform
+// this server is on so the client can show the right UI instead of
+// pretending Windows has real owner/group/other bits.
+
+router.get('/files/permissions', (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+
+  let target;
+  try {
+    target = resolveSafePath(location.path, req.query.path || '');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (!fs.existsSync(target)) return res.status(404).json({ error: 'Not found' });
+
+  const stat = fs.statSync(target);
+  res.json({
+    mode: stat.mode & 0o777,
+    platform: process.platform === 'win32' ? 'win32' : 'posix',
+    isDirectory: stat.isDirectory(),
+  });
+});
+
+router.put('/files/permissions', (req, res) => {
+  const location = getLocationOrNull(req.body.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+
+  let target;
+  try {
+    target = resolveSafePath(location.path, req.body.path || '');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (!fs.existsSync(target)) return res.status(404).json({ error: 'Not found' });
+
+  const mode = Number(req.body.mode);
+  if (!Number.isInteger(mode) || mode < 0 || mode > 0o777) {
+    return res.status(400).json({ error: 'Invalid permissions value' });
+  }
+
+  try {
+    fs.chmodSync(target, mode);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  res.json({ ok: true });
+});
+
 // ---------- upload ----------
 // diskStorage (not memoryStorage, unlike the avatar/photo/import routes) —
 // this is the one upload path meant for large files, so nothing should
@@ -216,6 +415,7 @@ const upload = multer({
         const dir = resolveSafePath(location.path, req.query.path || '.');
         const name = sanitizeName(file.originalname);
         if (!name) return cb(new Error('Invalid filename'));
+        if (name === '.trash' && dir === path.resolve(location.path)) return cb(new Error('RESERVED'));
         if (req.query.overwrite !== '1' && fs.existsSync(path.join(dir, name))) {
           return cb(new Error('EEXIST'));
         }
@@ -231,6 +431,7 @@ router.post('/files/upload', (req, res) => {
   upload.array('files')(req, res, (err) => {
     if (err) {
       if (err.message === 'EEXIST') return res.status(409).json({ error: 'A file with that name already exists' });
+      if (err.message === 'RESERVED') return res.status(409).json({ error: '".trash" is a reserved name at a location\'s root' });
       return res.status(400).json({ error: err.message || 'Upload failed' });
     }
     res.status(201).json({ uploaded: (req.files || []).length });
@@ -253,6 +454,9 @@ router.post('/files/mkdir', (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
+  if (isTrashRootPath(location, target)) {
+    return res.status(409).json({ error: '".trash" is a reserved name at a location\'s root' });
+  }
   if (fs.existsSync(target)) return res.status(409).json({ error: 'A file or folder with that name already exists' });
 
   try {
@@ -280,6 +484,9 @@ router.put('/files/rename', (req, res) => {
   }
 
   if (!fs.existsSync(source)) return res.status(404).json({ error: 'Not found' });
+  if (isTrashRootPath(location, destination)) {
+    return res.status(409).json({ error: '".trash" is a reserved name at a location\'s root' });
+  }
   if (fs.existsSync(destination)) return res.status(409).json({ error: 'A file or folder with that name already exists' });
 
   try {
@@ -290,6 +497,8 @@ router.put('/files/rename', (req, res) => {
   res.json({ ok: true });
 });
 
+// Moves to .trash rather than permanently deleting — see the trash section
+// above. Permanent removal only happens via the trash routes below.
 router.delete('/files/item', (req, res) => {
   const location = getLocationOrNull(req.query.location);
   if (!location) return res.status(404).json({ error: 'Location not found' });
@@ -306,8 +515,87 @@ router.delete('/files/item', (req, res) => {
   }
   if (!fs.existsSync(target)) return res.status(404).json({ error: 'Not found' });
 
+  const relPath = path.relative(location.path, target).split(path.sep).join('/');
+  const name = path.basename(target);
+  const itemDir = path.join(trashDir(location), crypto.randomUUID());
+
   try {
-    fs.rmSync(target, { recursive: true });
+    fs.mkdirSync(itemDir, { recursive: true });
+    fs.renameSync(target, path.join(itemDir, name));
+    fs.writeFileSync(
+      path.join(itemDir, '.meta.json'),
+      JSON.stringify({ name, originalRelPath: relPath, deletedAt: new Date().toISOString() })
+    );
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  res.status(204).end();
+});
+
+// ---------- trash management ----------
+
+router.get('/files/trash', (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+  res.json(readTrashEntries(location));
+});
+
+router.post('/files/trash/:id/restore', (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'Invalid trash item id' });
+
+  const itemDir = path.join(trashDir(location), req.params.id);
+  let meta;
+  try {
+    meta = JSON.parse(fs.readFileSync(path.join(itemDir, '.meta.json'), 'utf8'));
+  } catch {
+    return res.status(404).json({ error: 'Trash item not found' });
+  }
+
+  let destination;
+  try {
+    destination = resolveSafePath(location.path, meta.originalRelPath);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (fs.existsSync(destination)) {
+    return res.status(409).json({ error: 'Something already exists at the original location — move or rename it first' });
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.renameSync(path.join(itemDir, meta.name), destination);
+    fs.rmSync(itemDir, { recursive: true });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  res.json({ ok: true });
+});
+
+router.delete('/files/trash/:id', (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'Invalid trash item id' });
+
+  const itemDir = path.join(trashDir(location), req.params.id);
+  if (!fs.existsSync(itemDir)) return res.status(404).json({ error: 'Trash item not found' });
+
+  try {
+    fs.rmSync(itemDir, { recursive: true });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  res.status(204).end();
+});
+
+router.delete('/files/trash', (req, res) => {
+  const location = getLocationOrNull(req.query.location);
+  if (!location) return res.status(404).json({ error: 'Location not found' });
+
+  try {
+    fs.rmSync(trashDir(location), { recursive: true, force: true });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }

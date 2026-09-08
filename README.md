@@ -58,9 +58,9 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - **Calendar tab** with a full month-grid view, basic recurring events (daily/weekly/monthly, with an optional end date), and a built-in **CalDAV server** so events sync with your phone's native calendar app — the same server address and login as Contacts sync — see [Calendar & CalDAV sync](#calendar--caldav-sync)
 - Calendar: click a date to open that day's events in a side panel (the month grid shrinks to make room); right-click a date or an event for a quick Add/Edit/Remove menu; import/export `.ics` (iCalendar) files
 - Settings → **How to use SyncMark**: an in-app quick tour plus step-by-step CardDAV/CalDAV sync setup for iOS, Android, Linux, and Windows
-- **File Manager tab** (off by default — turn it on in Settings → General) — browse, upload, download, rename, and delete files under one or more admin-configured, strictly sandboxed server folders ("locations") — see [File Manager](#file-manager)
+- **File Manager tab** (off by default — turn it on in Settings → General) — browse, upload, download, view images/video, edit text files, rename, change permissions, and trash (with restore) files under one or more admin-configured, strictly sandboxed server folders ("locations") — see [File Manager](#file-manager)
 - **Mobile-responsive UI**: the whole app is usable on a phone, not just squeezed to fit — a slide-in drawer for folders/groups/locations, tables become tap-friendly cards, dialogs go full-screen, and long-press stands in for right-click — see [Mobile use](#mobile-use)
-- **Automated backups**: scheduled (daily/weekly) or on-demand full-instance snapshots with retention and one-click, password-confirmed restore — see [Backup & restore](#backup--restore)
+- **Automated backups**: scheduled (daily/weekly) or on-demand snapshots — including actual File Manager file contents, not just their paths — with retention, per-module selection for both backup and restore, and one-click, password-confirmed restore — see [Backup & restore](#backup--restore)
 - **Tabbed Settings**: Account / General / Bookmarks / Files / Contacts / Calendar / Backup, each with only the controls relevant to it instead of one long scrolling page, plus a search box that filters settings by keyword across every tab at once
 
 ## Screenshots
@@ -424,9 +424,17 @@ The **Files** tab is a personal file browser for the server itself — off by de
 
 **Sandboxing**: every location is a hard boundary. Browsing, uploading, downloading, renaming, and deleting can never reach outside the configured path — no `..` traversal, no absolute-path injection, and (best-effort) no escaping through a symlink placed inside the location either. Removing a location in Settings only un-registers it; nothing on disk is touched.
 
-**Using it**: double-click a folder to open it, click a file's Download button (or double-click it) to download, and right-click anything — a file, a folder, or empty space in the list — for a quick Add/Rename/Delete/Download menu. "New folder" and "Upload" (multiple files at once) are in the top bar. Uploads stream straight to disk rather than buffering in memory, and — unlike the 2 MB/25 MB caps on avatars and bookmark/contact/calendar imports elsewhere in the app — there's no file-size limit; disk space is the natural ceiling for a personal file server.
+**Using it**: double-click a folder to open it, or a file to view/edit it in the browser where possible (see below) — otherwise it downloads. Click a file's Download button to always get the raw file regardless of type. Right-click anything — a file, a folder, or empty space in the list — for a quick menu: Download, View (images/video), Edit (text files), Rename, Permissions, and Move to trash. "New folder" and "Upload" (multiple files at once) are in the top bar. Uploads stream straight to disk rather than buffering in memory, and — unlike the 2 MB/25 MB caps on avatars and bookmark/contact/calendar imports elsewhere in the app — there's no file-size limit; disk space is the natural ceiling for a personal file server.
 
-**Known limitations**: no in-browser text/image preview or editing (download to view), no move-between-locations or bulk multi-select yet, and no archive (.zip) download for a whole folder at once.
+**Viewing images and video**: PNG/JPEG/GIF/WebP images and MP4/WebM/Ogg/MOV video play inline in a preview dialog rather than downloading — served with the same strict-MIME-allowlist, `nosniff`, locked-down-CSP recipe the contact-photo endpoint already uses, so an unrecognized extension is refused (415) rather than guessed at.
+
+**Editing text files**: common text/code extensions (`.txt .md .json .csv .log .yml .ini .conf .env .xml .css .js .ts .html .py .java .c .cpp .sh` and a few more) open in an in-browser editor — full-file overwrite on Save, capped at 5 MB (a file larger than that isn't realistically editable in a browser `<textarea>` anyway). Closing with unsaved changes asks for confirmation first.
+
+**Permissions**: right-click → Permissions shows an owner/group/other × read/write/execute grid on Linux/macOS, or a single "Read-only" toggle on Windows (Node's `chmod` only meaningfully controls that one bit there). Applies to the item itself only, not recursively to a folder's contents.
+
+**Trash**: deleting now moves an item to a hidden `.trash` folder inside its location rather than deleting it immediately. Each location shows its own **Trash** as a nested entry right under it in the sidebar — clicking it browses into that location's trash the same way you'd browse into any folder, with the breadcrumb showing "Location / Trash". Each row offers Restore (back to its exact original path, recreating parent folders if needed) or Delete permanently, and an "Empty trash" button appears in the toolbar while you're in that view. Nothing is purged automatically — items stay until you clear them yourself. A location's `.trash` folder itself never shows up in normal browsing, and `.trash` is a reserved name at a location's root (an upload/folder/rename using it there is rejected) so it can never be shadowed by something else.
+
+**Known limitations**: no move-between-locations or bulk multi-select yet, no archive (.zip) download for a whole folder at once, permission changes aren't recursive, and trash has no automatic purge/expiry.
 
 ## Mobile use
 
@@ -444,17 +452,21 @@ There's no installable app or offline support (no PWA manifest/service worker) �
 
 ## Backup & restore
 
-Settings → Backup covers both scheduled and one-off backups of the whole instance — not just bookmarks, but contacts (with groups), the calendar, file locations, and account/settings too.
+Settings → Backup covers both scheduled and one-off backups of the whole instance, split into five independent **modules** — Bookmarks, Contacts (with groups), Calendar, Files, and Account & settings — each of which can be included or left out separately, for both backing up and restoring.
 
-**What a backup contains**: a single gzip-compressed JSON snapshot of every table except active sessions (restoring signs every device out on purpose — see below). It's a portable, human-inspectable format, not a copy of the raw SQLite file.
+**What a backup contains**: a gzip-compressed `.tar.gz` archive — `db.json` (the selected modules' database rows) plus, when the Files module is included, the actual file contents of every configured File Manager location, not just their registered paths. Active sessions are never included (restoring the Account module signs every device out on purpose — see below). It's a real, standard tar archive: openable with any ordinary tool, not just SyncMark itself.
+
+**Choosing what to back up**: the checkbox row under "What to back up" applies to both scheduled backups and "Back up now." Leaving Files selected means backup size and time scale with however much you keep in File Manager locations — worth knowing before pointing a location at something huge.
 
 **Automatic backups** (off by default): turn on "Back up automatically," choose daily or weekly, and how many backups to keep (oldest are pruned once you're over the count). By default backups are written to `data/backups/` on the server, but you can point the directory field at anywhere else the server can write to — including a folder synced by rclone, Dropbox, OneDrive, or similar, if you want an actual off-machine copy. SyncMark itself has no cloud-provider integration; pointing it at a synced folder is what gets a copy off the machine.
 
-**Manual backups**: "Back up now" creates one immediately with the current settings, independent of the schedule.
+**Manual backups**: "Back up now" creates one immediately with the current module selection, independent of the schedule.
 
-**Restoring**: each entry in the restore-points list can be downloaded (as plain `.json`, decompressed), deleted, or restored. Restoring is as destructive as it sounds — it replaces everything currently in the instance with the backup's contents — so it's password-confirmed, like deleting the account, and every device (including the one doing the restore) is signed out afterward since the account itself may have changed. It runs live, through the server's existing database connection; there's no need to stop or restart the server to restore a backup.
+**Restoring**: each entry in the restore-points list shows which modules it contains, and can be downloaded, deleted, or restored. The restore dialog lets you pick which of *those* modules to actually apply — restoring just Bookmarks from a backup leaves your current Contacts/Calendar/Files/Account completely untouched. Database modules (Bookmarks/Contacts/Calendar/Account) fully replace their current data when applied — that part is as destructive as it sounds, so it's password-confirmed like deleting the account. **Files is the one exception**: restoring it only adds and overwrites files from the backup — anything present in a location that isn't in the backup is left alone, never deleted, since real files on disk aren't as trivially recoverable as a database row is. Every device is signed out only if the Account module was applied, since that's the only module that can change who's logged in. Restoring runs live, through the server's existing database connection; there's no need to stop or restart the server.
 
-**Note on CardDAV/CalDAV sync after a restore**: restoring an older backup can move contacts/calendar data backward relative to what a phone or desktop client last synced. If a synced device looks out of step afterward, removing and re-adding its CardDAV/CalDAV account forces a full resync.
+**Older backups keep working**: a `.json.gz` backup made before this module system existed (database-only, no file contents) still lists, downloads, and restores correctly — it's just treated as containing every module.
+
+**Note on CardDAV/CalDAV sync after a restore**: restoring an older Contacts or Calendar backup can move that data backward relative to what a phone or desktop client last synced. If a synced device looks out of step afterward, removing and re-adding its CardDAV/CalDAV account forces a full resync.
 
 ## API
 
@@ -530,21 +542,29 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | GET    | `/api/files/browse-server` | List directories at an arbitrary server path (`?path=`, omit for the drive list on Windows or `/` elsewhere) — for picking a location's path, not sandboxed to a location |
 | GET    | `/api/files/browse`   | List a folder's contents (`?location=<id>&path=<relative>`) — `[{ name, type: "dir"\|"file", size, modifiedAt }]` |
 | GET    | `/api/files/download` | Download a file (`?location=&path=`), streamed          |
+| GET    | `/api/files/view`     | View an image/video inline (`?location=&path=`) — 415 if the extension isn't on the allowlist |
+| GET    | `/api/files/text`     | Read a text file's content (`?location=&path=`) — `{ content }`, 413 if over 5 MB |
+| PUT    | `/api/files/text`     | Save a text file — raw `text/plain` body (`?location=&path=`), full overwrite, 413 if over 5 MB |
+| GET    | `/api/files/permissions` | Read a file/folder's mode (`?location=&path=`) — `{ mode, platform: "win32"\|"posix", isDirectory }` |
+| PUT    | `/api/files/permissions` | Set a file/folder's mode (`{ location, path, mode }`, 0–0o777) — not recursive for folders |
 | POST   | `/api/files/upload`   | Upload one or more files (`?location=&path=`, multipart field `files`) — 409 if a name collides unless `&overwrite=1` |
 | POST   | `/api/files/mkdir`    | Create a folder (`{ location, path, name }`)             |
 | PUT    | `/api/files/rename`   | Rename a file or folder in place (`{ location, path, newName }`) |
-| DELETE | `/api/files/item`     | Delete a file, or a folder and everything in it (`?location=&path=`) |
+| DELETE | `/api/files/item`     | Move a file or folder to that location's trash (`?location=&path=`) — no longer a permanent delete |
+| GET    | `/api/files/trash`    | List a location's trash (`?location=`) — `[{ id, name, originalRelPath, deletedAt, size }]` |
+| POST   | `/api/files/trash/:id/restore` | Restore a trashed item to its original path (`?location=`) — 409 if something's there now |
+| DELETE | `/api/files/trash/:id` | Permanently delete one trashed item (`?location=`)      |
+| DELETE | `/api/files/trash`    | Empty a location's trash entirely (`?location=`)         |
 | GET    | `/api/backups`        | List restore points (`[{ name, size, modifiedAt }]`), newest first |
-| POST   | `/api/backups/run`    | Create a backup immediately, using the current schedule settings |
-| GET/PUT | `/api/backups/schedule` | Get/set the backup schedule (`{ enabled, frequency: "daily"\|"weekly", retentionCount, dir }`) |
-| GET    | `/api/backups/:file/download` | Download a backup, decompressed to plain `.json` |
+| POST   | `/api/backups/run`    | Create a backup immediately (`{ modules? }`, defaults to the schedule's selection) |
+| GET    | `/api/backups/:file/modules` | Which modules a specific backup contains (`{ modules: string[] }`) |
+| GET/PUT | `/api/backups/schedule` | Get/set the backup schedule (`{ enabled, frequency: "daily"\|"weekly", retentionCount, dir, modules: string[] }`) — `modules` is any non-empty subset of `bookmarks`/`contacts`/`calendar`/`files`/`account` |
+| GET    | `/api/backups/:file/download` | Download a backup — the raw `.tar.gz` archive, or decompressed plain `.json` for a legacy `.json.gz` one |
 | DELETE | `/api/backups/:file`  | Delete one restore point                             |
-| POST   | `/api/backups/:file/restore` | Restore a backup (`{ password }`) — replaces all current data, signs out every device |
+| POST   | `/api/backups/:file/restore` | Restore a backup (`{ password, modules? }`, defaults to every module the backup contains) — returns `{ appliedModules }`; signs out every device only if `account` was applied |
 
 Favicons are rendered client-side via Google's public favicon service (`s2/favicons`), based on each bookmark's domain — no favicon data is stored server-side. Theme and default view preferences are stored in the browser's `localStorage`.
 
 ## AI usage disclaimer
 
-SyncMark's code, documentation, and design were written substantially with the help of AI coding assistants (Claude, via Claude Code), directed and reviewed by the project's maintainer. It is not "vibe-coded" in the sense of unreviewed, unverified output — every feature has gone through deliberate design discussion, and changes are tested (unit tests where it makes sense, end-to-end checks against a running instance, and manual verification) before being considered done.
-
-That said: this is a personal, self-hosted project maintained by one person, not an audited or professionally-supported product. If you're relying on it for anything sensitive, read the code (it's small enough to), and treat this disclaimer as a prompt to do your own review rather than an assurance that none is needed.
+AI (Claude, via Claude Code) was used to help build this project.

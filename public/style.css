@@ -958,6 +958,24 @@ button.danger {
   color: var(--on-primary);
 }
 
+/* Per-location Trash entry, shown as a nested child of its location — same
+   idea as a Recycle Bin per drive, since trash lives inside that location's
+   own sandbox and can't be shared across locations. */
+.location-sublist {
+  list-style: none;
+  margin: 0 0 0.25rem;
+  padding: 0;
+}
+
+.folder-btn-nested {
+  padding-left: 2.25rem;
+  font-size: 0.8125rem;
+}
+
+.folder-btn-nested .material-symbols-outlined {
+  font-size: 18px;
+}
+
 .folder-chevron {
   background: transparent;
   color: var(--on-surface-variant);
@@ -2702,6 +2720,82 @@ button.danger {
   box-shadow: inset 3px 0 0 var(--primary);
 }
 
+/* ---------- File preview / edit / permissions / trash ---------- */
+
+.preview-modal {
+  max-width: 720px;
+}
+
+.preview-heading {
+  font-size: 1.1rem;
+  word-break: break-all;
+}
+
+.preview-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 70vh;
+  overflow: auto;
+  background: var(--surface-dim);
+  border-radius: var(--corner-md);
+}
+
+.preview-media img,
+.preview-media video {
+  max-width: 100%;
+  max-height: 70vh;
+  display: block;
+}
+
+.text-editor-modal {
+  max-width: 780px;
+  width: 100%;
+}
+
+.text-editor-heading {
+  font-size: 1.1rem;
+  word-break: break-all;
+}
+
+.text-editor-textarea {
+  width: 100%;
+  min-height: 50vh;
+  font-family: 'Roboto Mono', ui-monospace, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  padding: 0.85rem;
+  border-radius: var(--corner-sm);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-dim);
+  color: var(--on-surface);
+  resize: vertical;
+  tab-size: 2;
+}
+
+.text-editor-textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.permissions-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.permissions-grid th,
+.permissions-grid td {
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  font-size: 0.8125rem;
+}
+
+.permissions-grid td:first-child {
+  text-align: left;
+  color: var(--on-surface-variant);
+}
+
 /* ---------- Calendar ---------- */
 
 .calendar-layout .content {
@@ -3023,7 +3117,13 @@ button.danger {
   font-size: 20px;
 }
 
+/* background is repeated here (not just on .context-menu-item) because the
+   shared `button.danger` rule (element + class, higher specificity than
+   .context-menu-item's single class) would otherwise win the background
+   property and paint these solid red — leaving red text on a red
+   background, unreadable. */
 .context-menu-item.danger {
+  background: transparent;
   color: var(--error);
 }
 

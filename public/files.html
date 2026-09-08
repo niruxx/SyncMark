@@ -72,8 +72,13 @@
       <main class="content">
         <div class="toolbar">
           <nav class="breadcrumb" id="breadcrumb" aria-label="Current folder"></nav>
+          <button type="button" id="trash-empty-btn" class="danger" hidden>Empty trash</button>
           <span id="result-count"></span>
         </div>
+
+        <p class="settings-hint" id="trash-hint" hidden>
+          Deleted items stay here until you restore or permanently delete them — nothing is purged automatically.
+        </p>
 
         <table class="file-table" id="file-list" hidden>
           <thead>
@@ -81,7 +86,7 @@
               <th></th>
               <th>Name</th>
               <th>Size</th>
-              <th>Modified</th>
+              <th id="modified-header">Modified</th>
               <th></th>
             </tr>
           </thead>
@@ -126,6 +131,80 @@
         </form>
       </div>
     </div>
+
+    <div class="modal-backdrop" id="preview-modal">
+      <div class="modal preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-heading">
+        <h2 id="preview-heading" class="preview-heading"></h2>
+        <div class="preview-media" id="preview-media"></div>
+        <div class="modal-actions">
+          <button type="button" id="preview-close-btn" class="secondary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="text-editor-modal">
+      <div class="modal text-editor-modal" role="dialog" aria-modal="true" aria-labelledby="text-editor-heading">
+        <h2 id="text-editor-heading" class="text-editor-heading"></h2>
+        <textarea id="text-editor-textarea" class="text-editor-textarea" spellcheck="false"></textarea>
+        <p class="modal-error" id="text-editor-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" id="text-editor-cancel-btn" class="secondary">Cancel</button>
+          <button type="button" id="text-editor-save-btn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="permissions-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="permissions-heading">
+        <h2 id="permissions-heading">Permissions</h2>
+        <p class="settings-hint" id="permissions-name"></p>
+
+        <div id="permissions-posix">
+          <table class="permissions-grid">
+            <thead>
+              <tr><th></th><th>Read</th><th>Write</th><th>Execute</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Owner</td>
+                <td><input type="checkbox" data-perm="owner-r" /></td>
+                <td><input type="checkbox" data-perm="owner-w" /></td>
+                <td><input type="checkbox" data-perm="owner-x" /></td>
+              </tr>
+              <tr>
+                <td>Group</td>
+                <td><input type="checkbox" data-perm="group-r" /></td>
+                <td><input type="checkbox" data-perm="group-w" /></td>
+                <td><input type="checkbox" data-perm="group-x" /></td>
+              </tr>
+              <tr>
+                <td>Other</td>
+                <td><input type="checkbox" data-perm="other-r" /></td>
+                <td><input type="checkbox" data-perm="other-w" /></td>
+                <td><input type="checkbox" data-perm="other-x" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="settings-hint">Octal: <code id="permissions-octal">644</code></p>
+        </div>
+
+        <div id="permissions-windows" hidden>
+          <label class="modal-checkbox">
+            <input type="checkbox" id="permissions-readonly-input" />
+            Read-only
+          </label>
+          <p class="settings-hint">Windows doesn't have Linux-style per-owner/group/other permission bits — this toggles the file's read-only attribute.</p>
+        </div>
+
+        <p class="settings-hint">Applies to this item only, not its contents.</p>
+        <p class="modal-error" id="permissions-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" id="permissions-cancel-btn" class="secondary">Cancel</button>
+          <button type="button" id="permissions-save-btn">Save</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="ui.js"></script>

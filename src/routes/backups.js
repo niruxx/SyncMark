@@ -1,7 +1,11 @@
+const fs = require('fs');
 const express = require('express');
 const { statements } = require('../db');
 const { verifyPassword } = require('../utils/password');
+const { resolveSafePath } = require('../utils/fsPath');
 const {
+  MODULE_KEYS,
+  normalizeModules,
   getSchedule,
   saveSchedule,
   resolveBackupDir,
@@ -10,28 +14,49 @@ const {
   writeBackupFile,
   readBackupSnapshot,
   deleteBackupFile,
-  restoreFromSnapshot,
+  restoreBackup,
+  peekBackupModules,
   rescheduleBackups,
 } = require('../backup');
 
 const router = express.Router();
 
 const FREQUENCIES = ['daily', 'weekly'];
-const BACKUP_FILENAME_RE = /^syncmark-backup-[\w-]+\.json\.gz$/;
+const BACKUP_FILENAME_RE = /^syncmark-backup-[\w-]+\.(tar\.gz|json\.gz)$/;
 
 function isValidBackupFilename(name) {
   return typeof name === 'string' && BACKUP_FILENAME_RE.test(name);
 }
 
-router.get('/backups', (req, res) => {
-  res.json(listBackupFiles());
+router.get('/backups', async (req, res) => {
+  const dir = resolveBackupDir();
+  const files = listBackupFiles(dir);
+  const withModules = await Promise.all(
+    files.map(async (file) => {
+      try {
+        return { ...file, modules: await peekBackupModules(dir, file.name) };
+      } catch {
+        return { ...file, modules: [] };
+      }
+    })
+  );
+  res.json(withModules);
 });
 
-router.post('/backups/run', (req, res) => {
+router.post('/backups/run', async (req, res) => {
   try {
-    res.status(201).json(writeBackupFile());
+    res.status(201).json(await writeBackupFile(normalizeModules(req.body?.modules)));
   } catch (err) {
     res.status(500).json({ error: err.message || 'Backup failed' });
+  }
+});
+
+router.get('/backups/:file/modules', async (req, res) => {
+  if (!isValidBackupFilename(req.params.file)) return res.status(400).json({ error: 'Invalid backup filename' });
+  try {
+    res.json({ modules: await peekBackupModules(resolveBackupDir(), req.params.file) });
+  } catch (err) {
+    res.status(404).json({ error: 'Backup not found' });
   }
 });
 
@@ -66,6 +91,11 @@ router.put('/backups/schedule', (req, res) => {
       next.dir = null;
     }
   }
+  if (body.modules !== undefined) {
+    const modules = normalizeModules(body.modules);
+    if (!modules) return res.status(400).json({ error: 'Select at least one module to back up' });
+    next.modules = modules;
+  }
 
   const schedule = saveSchedule(next);
   rescheduleBackups();
@@ -75,6 +105,18 @@ router.put('/backups/schedule', (req, res) => {
 router.get('/backups/:file/download', (req, res) => {
   if (!isValidBackupFilename(req.params.file)) return res.status(400).json({ error: 'Invalid backup filename' });
 
+  if (req.params.file.endsWith('.tar.gz')) {
+    let target;
+    try {
+      target = resolveSafePath(resolveBackupDir(), req.params.file);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (!fs.existsSync(target)) return res.status(404).json({ error: 'Backup not found' });
+    return res.download(target, req.params.file);
+  }
+
+  // Legacy .json.gz — same decompress-and-serve-as-.json behaviour as before.
   try {
     const snapshot = readBackupSnapshot(resolveBackupDir(), req.params.file);
     const jsonName = req.params.file.replace(/\.gz$/, '');
@@ -97,9 +139,10 @@ router.delete('/backups/:file', (req, res) => {
 });
 
 // As destructive as deleting the account — same password-confirmation
-// pattern as DELETE /auth/account, and the same reasoning for forcing a
-// fresh login afterward instead of trusting the now-stale session.
-router.post('/backups/:file/restore', (req, res) => {
+// pattern as DELETE /auth/account. Session is only invalidated when the
+// `account` module was actually applied (restoring e.g. just Bookmarks
+// doesn't touch who's logged in, so there's no reason to sign anyone out).
+router.post('/backups/:file/restore', async (req, res) => {
   if (!isValidBackupFilename(req.params.file)) return res.status(400).json({ error: 'Invalid backup filename' });
 
   const user = statements.getUserById.get(req.session.user_id);
@@ -110,16 +153,17 @@ router.post('/backups/:file/restore', (req, res) => {
     return res.status(401).json({ error: 'Incorrect password' });
   }
 
-  let snapshot;
+  let result;
   try {
-    snapshot = readBackupSnapshot(resolveBackupDir(), req.params.file);
+    result = await restoreBackup(resolveBackupDir(), req.params.file, normalizeModules(req.body.modules));
   } catch (err) {
-    return res.status(404).json({ error: 'Backup not found' });
+    return res.status(400).json({ error: err.message || 'Restore failed' });
   }
 
-  restoreFromSnapshot(snapshot);
-  res.setHeader('Set-Cookie', 'session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
-  res.status(204).end();
+  if (result.appliedModules.includes('account')) {
+    res.setHeader('Set-Cookie', 'session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
+  }
+  res.status(200).json({ appliedModules: result.appliedModules });
 });
 
 module.exports = router;

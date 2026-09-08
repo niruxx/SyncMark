@@ -71,6 +71,16 @@ const restoreBackupForm = document.getElementById('restore-backup-form');
 const restoreBackupPassword = document.getElementById('restore-backup-password');
 const restoreBackupError = document.getElementById('restore-backup-error');
 const restoreBackupCancel = document.getElementById('restore-backup-cancel');
+const backupModulesGroup = document.getElementById('backup-modules-group');
+const restoreModulesGroup = document.getElementById('restore-modules-group');
+
+const MODULE_LABELS = {
+  bookmarks: 'Bookmarks',
+  contacts: 'Contacts',
+  calendar: 'Calendar',
+  files: 'Files',
+  account: 'Account & settings',
+};
 
 async function api(path, options) {
   progress.start();
@@ -459,11 +469,14 @@ passwordForm.addEventListener('submit', async (e) => {
 async function loadBackupSchedule() {
   try {
     const schedule = await api('/backups/schedule');
-    backupEnabledToggle.checked = schedule.enabled;
+    setPressed(backupEnabledToggle, schedule.enabled);
     backupFrequencySelect.value = schedule.frequency;
     backupRetentionInput.value = schedule.retentionCount;
     backupDirInput.value = schedule.dir || '';
     backupDirInput.placeholder = `Default: ${schedule.effectiveDir}`;
+    for (const btn of backupModulesGroup.querySelectorAll('.feature-toggle-btn')) {
+      setPressed(btn, (schedule.modules || []).includes(btn.dataset.module));
+    }
   } catch {
     /* leave defaults */
   }
@@ -485,10 +498,30 @@ async function saveBackupSchedule(patch) {
   }
 }
 
-backupEnabledToggle.addEventListener('change', () => saveBackupSchedule({ enabled: backupEnabledToggle.checked }));
+backupEnabledToggle.addEventListener('click', () => {
+  const next = !isPressed(backupEnabledToggle);
+  setPressed(backupEnabledToggle, next);
+  saveBackupSchedule({ enabled: next });
+});
 backupFrequencySelect.addEventListener('change', () => saveBackupSchedule({ frequency: backupFrequencySelect.value }));
 backupRetentionInput.addEventListener('change', () => saveBackupSchedule({ retentionCount: Number(backupRetentionInput.value) }));
 backupDirInput.addEventListener('change', () => saveBackupSchedule({ dir: backupDirInput.value.trim() }));
+
+for (const btn of backupModulesGroup.querySelectorAll('.feature-toggle-btn')) {
+  btn.addEventListener('click', () => {
+    const nextOn = !isPressed(btn);
+    const stillSelected = [...backupModulesGroup.querySelectorAll('.feature-toggle-btn')].filter((b) =>
+      b === btn ? nextOn : isPressed(b)
+    );
+    if (stillSelected.length === 0) {
+      backupScheduleError.textContent = 'Select at least one module to back up.';
+      backupScheduleError.hidden = false;
+      return;
+    }
+    setPressed(btn, nextOn);
+    saveBackupSchedule({ modules: stillSelected.map((b) => b.dataset.module) });
+  });
+}
 
 function formatBackupSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -517,7 +550,8 @@ function renderBackups(backups) {
     const nameSpan = document.createElement('span');
     nameSpan.className = 'folders-manage-name';
     const when = new Date(backup.modifiedAt).toLocaleString();
-    nameSpan.textContent = `${when} — ${formatBackupSize(backup.size)}`;
+    const moduleList = (backup.modules || []).map((m) => MODULE_LABELS[m] || m).join(', ') || 'Unknown contents';
+    nameSpan.textContent = `${when} — ${formatBackupSize(backup.size)} — ${moduleList}`;
 
     const actions = document.createElement('div');
     actions.className = 'actions';
@@ -576,7 +610,33 @@ let pendingRestoreBackup = null;
 
 function openRestoreBackupModal(backup) {
   pendingRestoreBackup = backup;
-  restoreBackupSubtitle.textContent = `This replaces everything currently in SyncMark with the backup from ${new Date(backup.modifiedAt).toLocaleString()}. You'll need to sign in again afterward. There is no undo. Enter your password to confirm.`;
+  restoreBackupSubtitle.textContent = `This replaces the selected modules' data with the backup from ${new Date(backup.modifiedAt).toLocaleString()}. If Account & settings is included, you'll need to sign in again afterward. There is no undo. Enter your password to confirm.`;
+
+  restoreModulesGroup.innerHTML = '';
+  const modules = backup.modules && backup.modules.length ? backup.modules : Object.keys(MODULE_LABELS);
+  for (const key of modules) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'feature-toggle-btn is-on';
+    btn.dataset.module = key;
+    btn.setAttribute('aria-pressed', 'true');
+    btn.textContent = MODULE_LABELS[key] || key;
+    btn.addEventListener('click', () => {
+      const nextOn = !isPressed(btn);
+      const stillSelected = [...restoreModulesGroup.querySelectorAll('.feature-toggle-btn')].filter((b) =>
+        b === btn ? nextOn : isPressed(b)
+      );
+      if (stillSelected.length === 0) {
+        restoreBackupError.textContent = 'Select at least one module to restore.';
+        restoreBackupError.hidden = false;
+        return;
+      }
+      restoreBackupError.hidden = true;
+      setPressed(btn, nextOn);
+    });
+    restoreModulesGroup.appendChild(btn);
+  }
+
   restoreBackupPassword.value = '';
   restoreBackupError.hidden = true;
   restoreBackupModal.classList.add('is-open');
@@ -601,11 +661,20 @@ restoreBackupForm.addEventListener('submit', async (e) => {
   restoreBackupError.hidden = true;
   if (!pendingRestoreBackup) return;
 
+  const selectedModules = [...restoreModulesGroup.querySelectorAll('.feature-toggle-btn')]
+    .filter((b) => isPressed(b))
+    .map((b) => b.dataset.module);
+  if (selectedModules.length === 0) {
+    restoreBackupError.textContent = 'Select at least one module to restore.';
+    restoreBackupError.hidden = false;
+    return;
+  }
+
   try {
     await api(`/backups/${encodeURIComponent(pendingRestoreBackup.name)}/restore`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: restoreBackupPassword.value }),
+      body: JSON.stringify({ password: restoreBackupPassword.value, modules: selectedModules }),
     });
     location.reload();
   } catch (err) {
