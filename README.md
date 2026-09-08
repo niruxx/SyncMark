@@ -567,4 +567,7 @@ Favicons are rendered client-side via Google's public favicon service (`s2/favic
 
 ## AI usage disclaimer
 
-AI (Claude, via Claude Code) was used to help build this project.
+> [!NOTE]
+> Parts of SyncMark's — code, documentation, and this README included — were
+> written with the help of AI coding assistants. Everything is reviewed before
+> it ships, but if you spot something that looks off, please open an issue.
