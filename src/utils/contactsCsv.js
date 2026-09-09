@@ -4,6 +4,8 @@
 // column named "Phone"/"Given Name"/"Company"/etc. (common in exports from
 // other address books) is still picked up.
 
+const { parseCsvRows } = require('./csv');
+
 const HEADER = ['First Name', 'Last Name', 'Organization', 'Phones', 'Emails', 'Notes', 'Favorite'];
 
 function csvEscape(value) {
@@ -14,6 +16,10 @@ function csvEscape(value) {
 function packEntries(entries) {
   return (entries || []).map((e) => `${e.type || 'other'}:${e.value}`).join('; ');
 }
+
+// A leading UTF-8 BOM makes Excel auto-detect the encoding instead of
+// mis-rendering accented names — CSV itself carries no encoding signal.
+const BOM = '﻿';
 
 function toCsv(contacts) {
   const lines = [HEADER.map(csvEscape).join(',')];
@@ -34,51 +40,7 @@ function toCsv(contacts) {
         .join(',')
     );
   }
-  return `${lines.join('\r\n')}\r\n`;
-}
-
-// Character-by-character RFC 4180 parse (handles quoted fields containing
-// commas/newlines/escaped "" quotes) — returns an array of raw string rows.
-function parseCsvRows(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-  const s = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  for (let i = 0; i < s.length; i += 1) {
-    const c = s[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (s[i + 1] === '"') {
-          field += '"';
-          i += 1;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += c;
-      }
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ',') {
-      row.push(field);
-      field = '';
-    } else if (c === '\n') {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else {
-      field += c;
-    }
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-
-  return rows.filter((r) => !(r.length === 1 && r[0] === ''));
+  return `${BOM}${lines.join('\r\n')}\r\n`;
 }
 
 // "cell:555-1234; work:555-5678" -> [{type,value}]. Also tolerates entries

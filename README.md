@@ -1,6 +1,6 @@
 # SyncMark
 
-A self-hosted bookmark manager. Import bookmark exports from your browser (HTML or JSON) into a local server, then browse, search, edit, and delete them from a web UI — protected by a username/password you set up on first run.
+A self-hosted bookmark manager. Import bookmark exports from your browser, or from Pocket, Instapaper, Readwise Reader, Omnivore, Matter, Linkwarden, mymind, Karakeep, Tab Session Manager, or OneTab, into a local server, then browse, search, edit, and delete them from a web UI — protected by a username/password you set up on first run.
 
 ![Bookmarks — list view](docs/screenshots/02-bookmarks-list.png)
 
@@ -15,6 +15,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - [Updating an existing instance](#updating-an-existing-instance)
 - [Configuration](#configuration)
 - [Importing bookmarks](#importing-bookmarks)
+  - [Exporting bookmarks](#exporting-bookmarks)
 - [Browser extensions](#browser-extensions)
 - [Contacts & CardDAV sync](#contacts--carddav-sync)
 - [Calendar & CalDAV sync](#calendar--caldav-sync)
@@ -37,7 +38,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser (HTML 
 - **Settings → Account**: set a custom profile picture (PNG/JPEG/GIF/WebP, up to 2 MB — stored in the database and shown in the top bar on every page), and change your username or password, each re-confirmed with your current password — lives alongside every other Settings tab rather than a separate page
 - A top progress bar on every action — API calls and page navigations alike — so nothing ever feels like it silently hung
 - Delete account (Settings → Danger zone): password-confirmed, permanently wipes the account *and* every bookmark/folder/setting, then returns to the first-run setup screen
-- Import Netscape-format HTML bookmark exports (Chrome, Firefox, Edge, Safari) and JSON exports (Chrome's `Bookmarks` file, Firefox's JSON backup, or a generic `{title, url}[]` array)
+- Import bookmark/read-it-later exports from a browser (Chrome, Firefox, Edge, Safari — HTML or JSON), Pocket, Instapaper, Readwise Reader, Omnivore, Tab Session Manager, OneTab, Matter, Linkwarden, mymind, or Karakeep — format is auto-detected from content, see [Importing bookmarks](#importing-bookmarks)
 - Add bookmarks manually, and edit or delete any bookmark (title, URL, folder) — imported or manual
 - Browse bookmarks in a collapsible folder tree — expand a folder to see its bookmarks inline, or click it to filter the main view (subfolders included); search over title and URL
 - Manage folders directly: create empty folders, rename (cascades to subfolders and their bookmarks) — either via the "Manage folders" dialog, or double-click a folder's name right in the sidebar for a quick inline rename — or delete (bookmarks become unfiled, not deleted)
@@ -296,6 +297,32 @@ rm -rf data && cp -r data-backup-YYYY-MM-DD data
 # then restart via your hosting method
 ```
 
+### Reinstalling via a fresh `git clone` (keeping your data)
+
+`git pull` in place (above) is the normal path — use a fresh clone only if you're moving to a new machine, or want a clean checkout instead of an existing one. Either way, the only thing that has to survive is the `data/` folder; everything else comes from the new clone:
+
+```bash
+# 1. Back up first, same as any update
+cp -r data data-backup-$(date +%F)
+
+# 2. Clone the new copy somewhere else (don't overwrite the old checkout yet)
+git clone https://github.com/<you>/SyncMark.git syncmark-new
+cd syncmark-new
+npm install
+
+# 3. Carry your data over — the new clone's own data/ is empty
+cp -r ../SyncMark/data ./data
+
+# 4. Start the new copy, verify it (see "Verify" above), then point your
+#    hosting method (systemd/pm2/Docker volume/reverse proxy) at the new
+#    directory and retire the old one
+npm start
+```
+
+On Windows PowerShell, swap step 1 and 3's `cp -r` for `Copy-Item -Recurse`. With Docker, there's nothing to copy at all — the bind-mounted `data/` directory on the host is already independent of the image, so re-running `docker compose up -d --build` (or pulling a new image) against the same volume is the fresh-clone equivalent.
+
+The one thing to get right: never `git clone` (or `git checkout`/`git clean`) *over* an existing install's own `data/` folder — a clean clone starts with no `data/` directory at all, and cloning into the same path SyncMark is already running from would require moving `data/` out of the way first. Cloning into a new, separate directory and copying `data/` in, as above, avoids that risk entirely.
+
 ### Notes on specific changes
 
 - **Browser-stored preferences.** Theme and default view live in each browser's `localStorage`, not the database, so they survive updates but are per-browser and won't follow you to a new device.
@@ -358,12 +385,30 @@ PORT=8080 npm start
 
 ## Importing bookmarks
 
-From your browser's bookmark manager, export your bookmarks:
+Settings → Bookmarks → **Import bookmarks** accepts a single file and figures out the format from its content — not the file extension or an explicit selector — so you just export from wherever your bookmarks currently live and upload whatever file (or the CSV/HTML file inside a `.zip`, if the service exports a zip — extract it first, SyncMark doesn't unzip archives) it gives you. Supported sources:
 
-- **Chrome/Edge**: `chrome://bookmarks` → menu → *Export bookmarks* (HTML), or copy the `Bookmarks` file from your profile directory (JSON)
-- **Firefox**: Bookmarks → Manage Bookmarks → Import and Backup → *Export Bookmarks to HTML…*, or *Backup…* for a JSON backup
+| Source | Export it as | Notes |
+| --- | --- | --- |
+| Chrome / Edge | HTML (`chrome://bookmarks` → menu → *Export bookmarks*) or the raw `Bookmarks` file (JSON) | Netscape Bookmark File Format / Chrome's own JSON tree |
+| Firefox | HTML or JSON (Bookmarks → Manage Bookmarks → Import and Backup) | Netscape format / Firefox's `text/x-moz-place` JSON backup |
+| Safari | HTML (File → Export Bookmarks) | Netscape format |
+| **Pocket** | HTML (`ril_export.html`) or CSV | Read/unread status comes from the Unread/Read Archive heading (HTML) or the `status` column (CSV) and becomes the folder |
+| **Instapaper** | HTML or CSV (Settings → export) | Folder column/heading preserved |
+| **Readwise Reader** | CSV ("Export Library as CSV" or the Command Palette's "Generate CSV export") | `Folder` column (Unread/Archive) preserved |
+| **Omnivore** | JSON (`metadata_*.json`) | Labels become the folder |
+| **Tab Session Manager** | JSON (session export) | Each session becomes a folder, tabs within its windows become bookmarks |
+| **OneTab** | plain text (default) or the JSON export some third-party scripts produce | Blank-line-separated tab groups become folders |
+| **Matter** | CSV or JSON | Best-effort — Matter's export isn't rigidly specified, so the URL/title/tag columns are matched leniently |
+| **Linkwarden** | full backup JSON | Collection hierarchy (including nested collections) is rebuilt as a folder path |
+| **mymind** | `cards.csv` (Account → *Export my mind*) | Best-effort lenient CSV matching, same as Matter |
+| **Karakeep** (formerly Hoarder) | JSON export | Tags become the folder |
+| Anything else | HTML, JSON, or a CSV with a `url`/`link` column | Falls back to generic parsing — a flat `{title, url}[]` JSON array or a lenient CSV import both work |
 
-Then open SyncMark, go to **Settings → Import**, and choose the `.html` or `.json` file. Folder structure from the export is preserved and browsable in the sidebar.
+Folder structure (or the closest equivalent — labels, tags, or a status/category column) is preserved and browsable in the sidebar after import. Whatever format you imported from, [exporting](#exporting-bookmarks) back out always produces the same standard HTML or JSON regardless of where the bookmarks originally came from — the source format only matters at import time.
+
+### Exporting bookmarks
+
+Settings → Bookmarks → **Export bookmarks** downloads everything currently in SyncMark as either a browser-importable Netscape HTML file or a JSON array (`GET /api/export?format=html` / `?format=json`) — the same two formats regardless of which of the sources above the bookmarks were originally imported from, since importing always normalizes into the same `{title, url, folder}` shape first.
 
 ## Browser extensions
 
@@ -387,7 +432,7 @@ A contact added, edited, or deleted on your phone syncs back to SyncMark (and to
 
 **Known limitation**: name, organization, title, phone numbers, emails, addresses, a birthday (from Key dates), social profiles, tags, notes, favorite, and photo all round-trip via vCard (`TITLE`, `ADR`, `BDAY`, `X-SOCIALPROFILE`, `CATEGORIES`). Messaging handles, custom fields, non-birthday key dates, and relationships have no vCard equivalent and are SyncMark-only — a vCard property outside the modeled set, from either side, is silently dropped rather than stored, so it won't reappear on a later sync.
 
-**Manual import/export**: Settings → Contacts (and the Contacts page toolbar) lets you import a `.vcf` (vCard) or `.csv` file, or export every contact as either — useful for one-off transfers or backups outside of CardDAV. CSV import accepts SyncMark's own export format (`First Name, Last Name, Organization, Phones, Emails, Notes, Favorite`, with multiple phones/emails packed into one cell as `type:value; type:value`) plus a few common alternate headers from other address books (`Given Name`/`Family Name`, `Company`, a plain `Name` column, etc.); it does not carry the newer fields below (title, tags, addresses, social/messaging, custom fields, key dates, relationships) — those are vCard/JSON-only for now. The Contacts page itself also supports multi-select (checkboxes + "select all") with a bulk-action bar to favorite, unfavorite, export, or delete several contacts at once, and "Export selected" for just the checked ones.
+**Manual import/export**: Settings → Contacts (and the Contacts page toolbar) lets you import a `.vcf` (vCard) or `.csv` file, or export every contact as either — useful for one-off transfers or backups outside of CardDAV. The CSV export is a plain, Excel/Google-Sheets-openable spreadsheet (with a UTF-8 BOM so accented names render correctly when opened in Excel, rather than a real binary `.xlsx` — there's no spreadsheet-format dependency in the project, and every spreadsheet app opens CSV natively). CSV import accepts SyncMark's own export format (`First Name, Last Name, Organization, Phones, Emails, Notes, Favorite`, with multiple phones/emails packed into one cell as `type:value; type:value`) plus a few common alternate headers from other address books (`Given Name`/`Family Name`, `Company`, a plain `Name` column, etc.); it does not carry the newer fields below (title, tags, addresses, social/messaging, custom fields, key dates, relationships) — those are vCard/JSON-only for now. The Contacts page itself also supports multi-select (checkboxes + "select all") with a bulk-action bar to favorite, unfavorite, export, or delete several contacts at once, and "Export selected" for just the checked ones.
 
 ### Fuzzy search, unified cards, tags & groups
 

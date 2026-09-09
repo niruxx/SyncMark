@@ -268,10 +268,16 @@
         <div class="settings-tab-panel" data-tab-panel="bookmarks" hidden>
         <section class="settings-section">
           <h2>Import bookmarks</h2>
-          <p class="settings-hint">Import bookmarks from a browser export — a Netscape-format HTML file, or a JSON export (Chrome's <code>Bookmarks</code> file, Firefox's JSON backup, or a plain <code>{title, url}[]</code> array). Folder structure is preserved.</p>
+          <p class="settings-hint">
+            Import from a browser export (Chrome, Firefox, Safari, Edge — HTML or JSON) or from Pocket, Omnivore,
+            Tab Session Manager, Instapaper, Readwise Reader, Matter, Linkwarden, mymind, Karakeep, or OneTab. The
+            file format is detected automatically — just choose whatever the export gave you (HTML, JSON, CSV, or
+            OneTab's plain text). Folder/tag structure is preserved where the source format has one.
+          </p>
+          <p class="settings-hint">If a service exports a <code>.zip</code> (e.g. Pocket's newer export), extract it first and upload the CSV or HTML file inside.</p>
           <div class="settings-row">
             <label class="button secondary" for="import-file">Choose file to import</label>
-            <input type="file" id="import-file" accept=".html,.htm,.json" hidden />
+            <input type="file" id="import-file" accept=".html,.htm,.json,.csv,.txt" hidden />
           </div>
         </section>
 
