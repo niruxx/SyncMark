@@ -12,7 +12,10 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
   - [Linux — step by step](#linux--step-by-step)
   - [Other platforms](#other-platforms)
 - [Hosting](#hosting)
-- [Updating an existing instance](#updating-an-existing-instance)
+- [Updating SyncMark](#updating-syncmark)
+  - [Resyncing an existing `git clone` install](#resyncing-an-existing-git-clone-install)
+  - [Reinstalling via a fresh `git clone`](#reinstalling-via-a-fresh-git-clone-keeping-your-data)
+  - [Downloading a fresh copy without git](#downloading-a-fresh-copy-without-git)
 - [Configuration](#configuration)
 - [Importing bookmarks](#importing-bookmarks)
   - [Exporting bookmarks](#exporting-bookmarks)
@@ -246,11 +249,21 @@ bookmarks.example.com {
 
 or an nginx server block proxying to `http://127.0.0.1:3000`. Session cookies are `HttpOnly`/`SameSite=Lax` but not marked `Secure`, so they *do* work over plain HTTP on a LAN — HTTPS via a reverse proxy is about protecting your password and session cookie in transit once traffic leaves your network, not a hard requirement to run it at all.
 
-## Updating an existing instance
+## Updating SyncMark
 
-Updating is: **back up → pull → install → restart**. Your data is never touched by an update — it lives in `data/bookmarks.sqlite3`, which is gitignored and stays put across pulls.
+Updating is: **back up → pull → install → restart**. Your data is never touched by an update — it lives in `data/bookmarks.sqlite3` (plus its `-wal`/`-shm` sidecar files while the server is running), which is gitignored and stays put across pulls, resets, a fresh clone, or a plain zip download. Three paths, depending on what you're doing:
 
-### 1. Back up first (always)
+- **[Resyncing an existing `git clone` install](#resyncing-an-existing-git-clone-install)** — the normal case: the same checkout you already have, brought up to date in place.
+- **[Reinstalling via a fresh `git clone`](#reinstalling-via-a-fresh-git-clone-keeping-your-data)** — moving to a new machine, or starting from a clean checkout instead of an existing one.
+- **[Downloading a fresh copy without git](#downloading-a-fresh-copy-without-git)** — the same as a fresh clone, but for a machine without git installed.
+
+Either way, [Database migrations](#database-migrations) below, and the verify step included in Resyncing, apply the same.
+
+### Resyncing an existing `git clone` install
+
+This is the day-to-day update path for a server you already `git clone`d and have been running — bring the checkout in the *same directory* up to date with the latest code, without touching anything in `data/`.
+
+**1. Back up first (always)**
 
 ```bash
 cp -r data data-backup-$(date +%F)
@@ -260,14 +273,28 @@ On Windows PowerShell: `Copy-Item data "data-backup-$(Get-Date -f yyyy-MM-dd)" -
 
 This is the one step worth never skipping — it's the whole database, and it's what lets you roll back.
 
-### 2. Pull, install, restart
+**2. Resync the code**
+
+A plain pull is enough if you've never hand-edited a file in the checkout:
 
 ```bash
 git pull
+```
+
+If `git pull` refuses because of local changes (e.g. you edited a file directly on the server at some point), or you'd rather just force the checkout to match `origin/main` exactly rather than merge, use a fetch + hard reset instead:
+
+```bash
+git fetch origin
+git reset --hard origin/main
+```
+
+`reset --hard` only touches **tracked** files — `data/` and everything in it (`.gitignore`'d) is untracked/ignored and is left alone either way, so this is safe to use purely to resync the code. (The same is true of `git clean` if you ever use it to remove stray files — pass `-x` and it *would* start removing ignored files too, so don't add `-x` here.)
+
+```bash
 npm install          # picks up any new/changed dependencies
 ```
 
-Then restart using whichever method you host with:
+**3. Restart**
 
 | Hosting method | Restart command |
 | --- | --- |
@@ -279,7 +306,7 @@ Then restart using whichever method you host with:
 
 With Docker Compose the `git pull` + `docker compose up -d --build` pair is all you need — `npm install` happens inside the image build.
 
-### 3. Verify
+**4. Verify**
 
 Load the page and confirm you're still signed in (or can sign in) and your bookmarks are listed. `curl -s localhost:3000/api/auth/status` should return `{"setupRequired":false,...}` — if it unexpectedly says `true`, stop and restore your backup, because that means it's looking at an empty database.
 
@@ -322,6 +349,39 @@ npm start
 On Windows PowerShell, swap step 1 and 3's `cp -r` for `Copy-Item -Recurse`. With Docker, there's nothing to copy at all — the bind-mounted `data/` directory on the host is already independent of the image, so re-running `docker compose up -d --build` (or pulling a new image) against the same volume is the fresh-clone equivalent.
 
 The one thing to get right: never `git clone` (or `git checkout`/`git clean`) *over* an existing install's own `data/` folder — a clean clone starts with no `data/` directory at all, and cloning into the same path SyncMark is already running from would require moving `data/` out of the way first. Cloning into a new, separate directory and copying `data/` in, as above, avoids that risk entirely.
+
+### Downloading a fresh copy without git
+
+If the server doesn't have git installed (or you'd just rather not use it), you can update the exact same way as the fresh-clone method above, but by downloading a plain zip of the source instead of running `git clone`. Because `data/` is gitignored, it was **never part of the repository to begin with** — GitHub's zip download can't contain it even if it wanted to, so there's nothing git-specific being relied on here for the database's safety.
+
+```bash
+# 1. Back up first, same as any update
+cp -r data data-backup-$(date +%F)
+
+# 2. Download and extract the latest source into a new directory
+curl -L -o syncmark-latest.zip https://github.com/<you>/SyncMark/archive/refs/heads/main.zip
+unzip syncmark-latest.zip
+cd SyncMark-main
+npm install
+
+# 3. Carry your data over — the fresh download has no data/ folder at all
+cp -r ../data ./data
+
+# 4. Start it, verify (see "Verify" above), then point your hosting method
+#    at the new directory and retire the old one
+npm start
+```
+
+On Windows, either use a browser (the repo's green **Code** button on GitHub → **Download ZIP**) or PowerShell:
+
+```powershell
+Invoke-WebRequest -Uri https://github.com/<you>/SyncMark/archive/refs/heads/main.zip -OutFile syncmark-latest.zip
+Expand-Archive syncmark-latest.zip -DestinationPath .
+```
+
+Swap `refs/heads/main` for a specific tag (e.g. `refs/tags/v1.1.0`) if you'd rather pin to a released version than always take the tip of `main`.
+
+This trades away git's incremental `pull` (you're always downloading the whole source tree, not a diff) for not needing git on the machine at all — same data-safety guarantee either way, just a different way of getting the new code onto disk. If git is available, the [git clone method](#reinstalling-via-a-fresh-git-clone-keeping-your-data) above is simpler for repeat updates since it doesn't involve manually finding and extracting a new zip each time.
 
 ### Notes on specific changes
 
