@@ -15,9 +15,9 @@ const caldavRouter = require('./src/routes/caldav');
 const { requireAuth } = require('./src/middleware/auth');
 const { requireFeature } = require('./src/middleware/featureGate');
 const { startScheduler } = require('./src/backup');
+const { PORT } = require('./src/config');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // CardDAV/CalDAV clients (iOS Contacts/Calendar, DAVx5) authenticate over HTTP
 // Basic Auth, not the session cookie — mounted before express.json() matters
