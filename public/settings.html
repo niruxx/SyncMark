@@ -24,6 +24,7 @@
           <a href="contacts.html" data-feature="contacts">Contacts</a>
           <a href="calendar.html" data-feature="calendar">Calendar</a>
           <a href="files.html" data-feature="files">Files</a>
+          <a href="passwords.html" data-feature="passwords">Passwords</a>
           <a href="settings.html" class="active">Settings</a>
         </nav>
       </div>
@@ -61,6 +62,7 @@
           <button type="button" class="settings-tab active" data-tab="general" role="tab" aria-selected="true">General</button>
           <button type="button" class="settings-tab" data-tab="bookmarks" role="tab" aria-selected="false">Bookmarks</button>
           <button type="button" class="settings-tab" data-tab="files" role="tab" aria-selected="false">Files</button>
+          <button type="button" class="settings-tab" data-tab="passwords" role="tab" aria-selected="false">Passwords</button>
           <button type="button" class="settings-tab" data-tab="contacts" role="tab" aria-selected="false">Contacts</button>
           <button type="button" class="settings-tab" data-tab="calendar" role="tab" aria-selected="false">Calendar</button>
           <button type="button" class="settings-tab" data-tab="backup" role="tab" aria-selected="false">Backup</button>
@@ -200,6 +202,10 @@
               <span class="material-symbols-outlined">folder</span>
               Files (browse/upload files on this server)
             </button>
+            <button type="button" class="feature-toggle-btn" id="feature-passwords-toggle" aria-pressed="false">
+              <span class="material-symbols-outlined">key</span>
+              Passwords (personal password manager)
+            </button>
           </div>
           <p class="modal-error" id="feature-error" hidden></p>
         </section>
@@ -334,6 +340,34 @@
         </section>
         </div>
 
+        <div class="settings-tab-panel" data-tab-panel="passwords" hidden>
+        <section class="settings-section">
+          <h2>Import / export</h2>
+          <p class="settings-hint">
+            Import a <code>.csv</code> export from Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden, LastPass,
+            or Dashlane — the file's columns are detected automatically. Export downloads every saved password as
+            plain-text CSV, so store or delete the downloaded file carefully.
+          </p>
+          <div class="settings-row">
+            <label class="button secondary" for="import-passwords-file-settings">Choose file to import</label>
+            <input type="file" id="import-passwords-file-settings" accept=".csv" hidden />
+          </div>
+          <div class="export-actions">
+            <a class="button secondary" href="/api/passwords/export" download>Export .csv</a>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Library</h2>
+          <div class="settings-stats">
+            <div class="stat-tile">
+              <span class="stat-value" id="stat-passwords">–</span>
+              <span class="stat-label">Passwords</span>
+            </div>
+          </div>
+        </section>
+        </div>
+
         <div class="settings-tab-panel" data-tab-panel="contacts" hidden>
         <section class="settings-section">
           <h2>Import / export</h2>
@@ -451,6 +485,7 @@
               <button type="button" class="feature-toggle-btn" data-module="contacts" aria-pressed="false">Contacts</button>
               <button type="button" class="feature-toggle-btn" data-module="calendar" aria-pressed="false">Calendar</button>
               <button type="button" class="feature-toggle-btn" data-module="files" aria-pressed="false">Files</button>
+              <button type="button" class="feature-toggle-btn" data-module="passwords" aria-pressed="false">Passwords</button>
               <button type="button" class="feature-toggle-btn" data-module="account" aria-pressed="false">Account &amp; settings</button>
             </div>
           </div>

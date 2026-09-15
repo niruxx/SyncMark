@@ -14,7 +14,14 @@ router.get('/stats', (req, res) => {
   const { count } = statements.countBookmarks.get();
   const { count: contactCount } = statements.countContacts.get();
   const { count: eventCount } = statements.countEvents.get();
-  res.json({ total: count, folderCount: listMergedFolders().length, contactTotal: contactCount, eventTotal: eventCount });
+  const { count: passwordCount } = statements.countPasswords.get();
+  res.json({
+    total: count,
+    folderCount: listMergedFolders().length,
+    contactTotal: contactCount,
+    eventTotal: eventCount,
+    passwordTotal: passwordCount,
+  });
 });
 
 router.put('/features', (req, res) => {
@@ -24,9 +31,10 @@ router.put('/features', (req, res) => {
     contacts: req.body.contacts !== undefined ? Boolean(req.body.contacts) : current.contacts,
     calendar: req.body.calendar !== undefined ? Boolean(req.body.calendar) : current.calendar,
     files: req.body.files !== undefined ? Boolean(req.body.files) : current.files,
+    passwords: req.body.passwords !== undefined ? Boolean(req.body.passwords) : current.passwords,
   };
 
-  if (!next.bookmarks && !next.contacts && !next.calendar && !next.files) {
+  if (!next.bookmarks && !next.contacts && !next.calendar && !next.files && !next.passwords) {
     return res.status(400).json({ error: 'At least one feature must stay enabled' });
   }
 

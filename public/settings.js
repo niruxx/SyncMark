@@ -4,11 +4,13 @@ const statTotal = document.getElementById('stat-total');
 const statFolders = document.getElementById('stat-folders');
 const statContacts = document.getElementById('stat-contacts');
 const statEvents = document.getElementById('stat-events');
+const statPasswords = document.getElementById('stat-passwords');
 const davUrlInput = document.getElementById('dav-url-input');
 const clearAllBtn = document.getElementById('clear-all-btn');
 const importFile = document.getElementById('import-file');
 const importContactsFile = document.getElementById('import-contacts-file-settings');
 const importEventsFile = document.getElementById('import-events-file');
+const importPasswordsFile = document.getElementById('import-passwords-file-settings');
 const sessionDurationSelect = document.getElementById('session-duration-select');
 const signOutBtn = document.getElementById('sign-out-btn');
 const accountUsernameEl = document.getElementById('account-username');
@@ -22,6 +24,7 @@ const featureBookmarksToggle = document.getElementById('feature-bookmarks-toggle
 const featureContactsToggle = document.getElementById('feature-contacts-toggle');
 const featureCalendarToggle = document.getElementById('feature-calendar-toggle');
 const featureFilesToggle = document.getElementById('feature-files-toggle');
+const featurePasswordsToggle = document.getElementById('feature-passwords-toggle');
 const featureError = document.getElementById('feature-error');
 const statLocations = document.getElementById('stat-locations');
 const locationsManageList = document.getElementById('locations-manage-list');
@@ -79,6 +82,7 @@ const MODULE_LABELS = {
   contacts: 'Contacts',
   calendar: 'Calendar',
   files: 'Files',
+  passwords: 'Passwords',
   account: 'Account & settings',
 };
 
@@ -121,11 +125,13 @@ async function loadStats() {
     statFolders.textContent = stats.folderCount;
     statContacts.textContent = stats.contactTotal;
     statEvents.textContent = stats.eventTotal;
+    statPasswords.textContent = stats.passwordTotal;
   } catch {
     statTotal.textContent = '–';
     statFolders.textContent = '–';
     statContacts.textContent = '–';
     statEvents.textContent = '–';
+    statPasswords.textContent = '–';
   }
 }
 
@@ -148,6 +154,7 @@ async function loadFeatures() {
     setPressed(featureContactsToggle, features.contacts);
     setPressed(featureCalendarToggle, features.calendar);
     setPressed(featureFilesToggle, features.files);
+    setPressed(featurePasswordsToggle, features.passwords);
   } catch {
     /* leave defaults */
   }
@@ -160,9 +167,10 @@ async function saveFeatures() {
     contacts: isPressed(featureContactsToggle),
     calendar: isPressed(featureCalendarToggle),
     files: isPressed(featureFilesToggle),
+    passwords: isPressed(featurePasswordsToggle),
   };
 
-  if (!next.bookmarks && !next.contacts && !next.calendar && !next.files) {
+  if (!next.bookmarks && !next.contacts && !next.calendar && !next.files && !next.passwords) {
     featureError.textContent = 'At least one feature must stay enabled.';
     featureError.hidden = false;
     await loadFeatures(); // revert the button the user just switched off
@@ -192,6 +200,7 @@ featureBookmarksToggle.addEventListener('click', () => toggleFeatureBtn(featureB
 featureContactsToggle.addEventListener('click', () => toggleFeatureBtn(featureContactsToggle));
 featureCalendarToggle.addEventListener('click', () => toggleFeatureBtn(featureCalendarToggle));
 featureFilesToggle.addEventListener('click', () => toggleFeatureBtn(featureFilesToggle));
+featurePasswordsToggle.addEventListener('click', () => toggleFeatureBtn(featurePasswordsToggle));
 
 // --- File locations ---
 
@@ -891,6 +900,24 @@ importEventsFile.addEventListener('change', async () => {
     showToast(`Import failed: ${err.message}`, 'error');
   } finally {
     importEventsFile.value = '';
+  }
+});
+
+importPasswordsFile.addEventListener('change', async () => {
+  const file = importPasswordsFile.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const result = await api('/passwords/import', { method: 'POST', body: formData });
+    showToast(`Imported ${result.imported} password${result.imported === 1 ? '' : 's'}`, 'success');
+    await loadStats();
+  } catch (err) {
+    showToast(`Import failed: ${err.message}`, 'error');
+  } finally {
+    importPasswordsFile.value = '';
   }
 });
 

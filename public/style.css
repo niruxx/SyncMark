@@ -142,6 +142,7 @@ html.page-leaving {
 .bookmark-table,
 .contact-table,
 .file-table,
+.password-table,
 .bookmark-card,
 .settings-section,
 .calendar-grid,
@@ -2206,6 +2207,126 @@ button.danger {
 .contact-table tbody tr:hover {
   background: var(--surface-container-low);
   box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* ---------- Passwords ---------- */
+
+.password-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--corner-lg);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+}
+
+.password-table th,
+.password-table td {
+  text-align: left;
+  padding: 0.9rem 0.85rem;
+  border-bottom: 1px solid var(--outline-variant);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.password-table th:first-child,
+.password-table td:first-child {
+  width: 3rem;
+}
+
+.password-table th:nth-child(2),
+.password-table td:nth-child(2) {
+  width: 30%;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.password-table th:nth-child(3),
+.password-table td:nth-child(3) { width: 20%; }
+
+.password-table th:nth-child(4),
+.password-table td:nth-child(4) {
+  width: 26%;
+  overflow: visible;
+}
+
+.password-table th:last-child,
+.password-table td:last-child {
+  width: 13rem;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.password-table th {
+  color: var(--on-surface-variant);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  background: var(--surface-container-low);
+}
+
+.password-table tbody tr {
+  animation: itemIn 0.34s var(--ease-out-soft) both;
+  transition: background-color 0.12s var(--ease);
+}
+
+.password-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.password-table tbody tr:hover {
+  background: var(--surface-container-low);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.password-row-subtext {
+  color: var(--on-surface-variant);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.password-reveal-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.password-value {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.password-visibility-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.password-field-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-field-wrap input {
+  flex: 1;
+  padding-right: 2.75rem;
+}
+
+.password-field-wrap .password-visibility-btn {
+  position: absolute;
+  right: 0.35rem;
 }
 
 .contact-avatar {

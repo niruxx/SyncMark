@@ -35,6 +35,7 @@ const MODULES = {
     settingsKeys: (key) => key === 'events_seq',
   },
   files: { label: 'Files', tables: ['file_locations'], includesFileContents: true },
+  passwords: { label: 'Passwords', tables: ['passwords'] },
   account: { label: 'Account & settings', tables: ['users'] },
 };
 const MODULE_KEYS = Object.keys(MODULES);

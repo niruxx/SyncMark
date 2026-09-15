@@ -8,12 +8,13 @@ const foldersRouter = require('./src/routes/folders');
 const contactsRouter = require('./src/routes/contacts');
 const eventsRouter = require('./src/routes/events');
 const filesRouter = require('./src/routes/files');
+const passwordsRouter = require('./src/routes/passwords');
 const featuresRouter = require('./src/routes/features');
 const backupsRouter = require('./src/routes/backups');
 const carddavRouter = require('./src/routes/carddav');
 const caldavRouter = require('./src/routes/caldav');
 const { requireAuth } = require('./src/middleware/auth');
-const { requireFeature } = require('./src/middleware/featureGate');
+const { gateRouter } = require('./src/middleware/featureGate');
 const { startScheduler } = require('./src/backup');
 const { PORT } = require('./src/config');
 
@@ -31,12 +32,13 @@ app.use(express.json());
 app.use('/api', authRouter);
 app.use('/api', requireAuth, featuresRouter);
 app.use('/api', requireAuth, backupsRouter);
-app.use('/api', requireAuth, requireFeature('bookmarks'), bookmarksRouter);
-app.use('/api', requireAuth, requireFeature('bookmarks'), importRouter);
-app.use('/api', requireAuth, requireFeature('bookmarks'), foldersRouter);
-app.use('/api', requireAuth, requireFeature('contacts'), contactsRouter);
-app.use('/api', requireAuth, requireFeature('calendar'), eventsRouter);
-app.use('/api', requireAuth, requireFeature('files'), filesRouter);
+app.use('/api', requireAuth, gateRouter('bookmarks', bookmarksRouter));
+app.use('/api', requireAuth, gateRouter('bookmarks', importRouter));
+app.use('/api', requireAuth, gateRouter('bookmarks', foldersRouter));
+app.use('/api', requireAuth, gateRouter('contacts', contactsRouter));
+app.use('/api', requireAuth, gateRouter('calendar', eventsRouter));
+app.use('/api', requireAuth, gateRouter('files', filesRouter));
+app.use('/api', requireAuth, gateRouter('passwords', passwordsRouter));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((err, req, res, next) => {

@@ -23,6 +23,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 - [Contacts & CardDAV sync](#contacts--carddav-sync)
 - [Calendar & CalDAV sync](#calendar--caldav-sync)
 - [File Manager](#file-manager)
+- [Passwords](#passwords)
 - [Mobile use](#mobile-use)
 - [Backup & restore](#backup--restore)
 - [API](#api)
@@ -34,7 +35,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 - Light and dark themes, both built on the same Material tonal palette (light by default; switch in Settings → Appearance)
 - A subtle, slow-drifting animated gradient behind the app (off automatically for anyone with reduced-motion preferences set) — only ever shown once you're signed in, never behind the sign-in/register screen
 - **A dedicated sign-in/register page on first run**: the first person to open SyncMark lands on a clean, standalone welcome page — a two-step wizard (username/password, then which of Bookmarks/Contacts/Calendar to turn on) rather than a dialog over a half-loaded app; after that, every visit opens a plain sign-in page before anything else loads. No email/SMTP involved anywhere — see [Resetting a forgotten password](#resetting-a-forgotten-password) for the CLI-based recovery path instead
-- **Feature toggles** (Settings → General, also set during first-run): turn Bookmarks/Contacts/Calendar/Files on or off — disabling one hard-blocks its API and CardDAV/CalDAV routes, not just its nav tab — see [Feature toggles](#feature-toggles)
+- **Feature toggles** (Settings → General, also set during first-run): turn Bookmarks/Contacts/Calendar/Files/Passwords on or off — disabling one hard-blocks its API and CardDAV/CalDAV routes, not just its nav tab — see [Feature toggles](#feature-toggles)
 - Click the "SyncMark" title in the top left from anywhere to jump back to your bookmarks
 - Configurable session length (Settings → Session): stay signed in for 5 minutes, 1 hour, 30 days, or permanently (never asked again) — applies the next time you sign in
 - Account menu (top right, click your name): jump straight to Settings → Account, or sign out, from anywhere in one click
@@ -63,9 +64,10 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 - Calendar: click a date to open that day's events in a side panel (the month grid shrinks to make room); right-click a date or an event for a quick Add/Edit/Remove menu; import/export `.ics` (iCalendar) files
 - Settings → **How to use SyncMark**: an in-app quick tour plus step-by-step CardDAV/CalDAV sync setup for iOS, Android, Linux, and Windows
 - **File Manager tab** (off by default — turn it on in Settings → General) — browse, upload, download, view images/video, edit text files, rename, change permissions, and trash (with restore) files under one or more admin-configured, strictly sandboxed server folders ("locations") — see [File Manager](#file-manager)
+- **Passwords tab** (off by default — turn it on in Settings → General): a personal password manager — save a site's URL/username/password/notes, favorite entries, generate strong passwords, reveal or copy a password on demand, and import a `.csv` export from Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden, LastPass, or Dashlane — see [Passwords](#passwords)
 - **Mobile-responsive UI**: the whole app is usable on a phone, not just squeezed to fit — a slide-in drawer for folders/groups/locations, tables become tap-friendly cards, dialogs go full-screen, and long-press stands in for right-click — see [Mobile use](#mobile-use)
 - **Automated backups**: scheduled (daily/weekly) or on-demand snapshots — including actual File Manager file contents, not just their paths — with retention, per-module selection for both backup and restore, and one-click, password-confirmed restore — see [Backup & restore](#backup--restore)
-- **Tabbed Settings**: Account / General / Bookmarks / Files / Contacts / Calendar / Backup, each with only the controls relevant to it instead of one long scrolling page, plus a search box that filters settings by keyword across every tab at once
+- **Tabbed Settings**: Account / General / Bookmarks / Files / Passwords / Contacts / Calendar / Backup, each with only the controls relevant to it instead of one long scrolling page, plus a search box that filters settings by keyword across every tab at once
 
 ## Screenshots
 
@@ -423,13 +425,13 @@ The prompt does **not** mask input, so only run it somewhere private. Either way
 
 ### Feature toggles
 
-Settings → General → Features lets you turn Bookmarks, Contacts, Calendar, and Files on or off independently (at least one must stay on) — also asked up front during the first-run wizard. Turning one off is a **hard** block, not just a hidden tab:
+Settings → General → Features lets you turn Bookmarks, Contacts, Calendar, Files, and Passwords on or off independently (at least one must stay on) — also asked up front during the first-run wizard. Turning one off is a **hard** block, not just a hidden tab:
 
-- Its `/api/*` routes start returning `403`.
-- Its CardDAV/CalDAV routes (`/dav/addressbooks/...` for Contacts, `/dav/calendars/...` for Calendar) start returning `403` too.
+- Its `/api/*` routes stop responding — the router is skipped entirely (a plain 404, same as any unrecognized path) rather than executing any of its handlers, and turning one feature off never blocks any *other* feature's routes.
+- Its CardDAV/CalDAV routes (`/dav/addressbooks/...` for Contacts, `/dav/calendars/...` for Calendar) start returning `403` instead.
 - It stops being *advertised* during CardDAV/CalDAV discovery — a PROPFIND on the principal no longer lists a disabled feature's home-set at all, so a phone/desktop client won't even offer to sync it.
 
-Existing installs that predate a given toggle keep working exactly as before — a never-set flag defaults to *enabled* for Bookmarks/Contacts/Calendar, so nothing already in use is silently turned off by an update. **Files is the one exception**: it defaults to *disabled*, since it never existed before and is the only feature that reads/writes the host filesystem directly rather than just app data — turning it on is meant to be a deliberate choice, not an update side effect.
+Existing installs that predate a given toggle keep working exactly as before — a never-set flag defaults to *enabled* for Bookmarks/Contacts/Calendar, so nothing already in use is silently turned off by an update. **Files and Passwords are the exceptions**: both default to *disabled*, since neither existed before and Files is the one feature that reads/writes the host filesystem directly rather than just app data — turning either on is meant to be a deliberate choice, not an update side effect.
 
 ### Data & backups
 
@@ -541,11 +543,21 @@ The **Files** tab is a personal file browser for the server itself — off by de
 
 **Known limitations**: no move-between-locations or bulk multi-select yet, no archive (.zip) download for a whole folder at once, permission changes aren't recursive, and trash has no automatic purge/expiry.
 
+## Passwords
+
+The **Passwords** tab is a personal password manager — off by default (see [Feature toggles](#feature-toggles)).
+
+**Using it**: add an entry with a site name, URL, username, and password, plus optional notes; favorite the ones you use most. The password column stays masked (`••••••••`) until you click the eye icon to reveal it or the copy icon to copy it straight to the clipboard — either fetches the plaintext on demand rather than shipping it with the row list. The add/edit dialog also has a **Generate password** button (20 characters, drawn from the Web Crypto API's `crypto.getRandomValues`, guaranteed at least one upper/lowercase letter, digit, and symbol).
+
+**Encryption at rest**: every saved password is encrypted (AES-256-GCM) before it's written to the database, using a key generated on first use and stored in the same SQLite file. This protects against a stray glance at the raw `bookmarks.sqlite3` file — it is **not** an end-to-end/zero-knowledge vault like Bitwarden or LastPass: there's no separate master password, and anyone signed in to your SyncMark account (or with direct access to the server/database) can decrypt and reveal any entry, the same trust model the rest of SyncMark already uses for session tokens and login password hashes.
+
+**Importing**: Settings → Passwords, or the Import button on the Passwords tab itself, accepts a `.csv` export from Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden, LastPass, or Dashlane — the column layout is detected automatically from the header row, so there's no format picker. A Bitwarden export's non-login items (secure notes, cards, identities) are skipped; a LastPass/Dashlane/Bitwarden entry's folder or TOTP secret, if present, is folded into the entry's Notes field rather than dropped, since SyncMark doesn't have dedicated folders or TOTP codes (yet). Export downloads everything as plain-text CSV — handle and delete the downloaded file carefully, since it's not encrypted the way the database is.
+
 ## Mobile use
 
 Every page works on a phone browser, not just a shrunk-down desktop layout:
 
-- **Collapsible navigation**: the top nav (Bookmarks/Contacts/Calendar/Files/Settings) collapses into a hamburger menu on narrow screens instead of wrapping awkwardly.
+- **Collapsible navigation**: the top nav (Bookmarks/Contacts/Calendar/Files/Passwords/Settings) collapses into a hamburger menu on narrow screens instead of wrapping awkwardly.
 - **Slide-in drawer**: on Bookmarks, Contacts, and Files — the three pages with a sidebar (folders, groups, and locations respectively) — the sidebar becomes an off-canvas drawer opened by a menu button, with a tap-outside-to-close backdrop, rather than pushing the page content down.
 - **Tables become cards**: the Bookmarks, Contacts, and Files tables restack into a card per row on phone-width screens instead of squeezing a multi-column table.
 - **Full-screen dialogs**: every modal (adding/editing a contact, an event, a bookmark, and so on) takes over the full screen on a phone instead of rendering as a cramped centered box.
@@ -557,7 +569,7 @@ There's no installable app or offline support (no PWA manifest/service worker) �
 
 ## Backup & restore
 
-Settings → Backup covers both scheduled and one-off backups of the whole instance, split into five independent **modules** — Bookmarks, Contacts (with groups), Calendar, Files, and Account & settings — each of which can be included or left out separately, for both backing up and restoring.
+Settings → Backup covers both scheduled and one-off backups of the whole instance, split into six independent **modules** — Bookmarks, Contacts (with groups), Calendar, Files, Passwords, and Account & settings — each of which can be included or left out separately, for both backing up and restoring.
 
 **What a backup contains**: a gzip-compressed `.tar.gz` archive — `db.json` (the selected modules' database rows) plus, when the Files module is included, the actual file contents of every configured File Manager location, not just their registered paths. Active sessions are never included (restoring the Account module signs every device out on purpose — see below). It's a real, standard tar archive: openable with any ordinary tool, not just SyncMark itself.
 
@@ -605,7 +617,7 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | PUT    | `/api/folders`        | Rename a folder (`{ oldName, newName }`), cascades to subfolders |
 | DELETE | `/api/folders`        | Delete a folder (`{ name }`); its bookmarks become unfiled |
 | PUT    | `/api/folders/reorder`| Set a folder's sidebar position between siblings (`{ name, beforeName, afterName }`) |
-| GET    | `/api/stats`          | Total bookmark, folder, contact, and event counts     |
+| GET    | `/api/stats`          | Total bookmark, folder, contact, event, and password counts |
 | GET    | `/api/contacts`       | List contacts — with `?q=`, fuzzy-ranked over name/org/title/phone/email/tags; without it, `?sort=name-asc\|name-desc\|created-asc\|created-desc`; `?favorite=1` and `?tag=<name>` filter either way |
 | GET    | `/api/contacts/tags`  | Distinct tags across all contacts, for the tag input's autocomplete |
 | POST   | `/api/contacts`       | Add a contact (`firstName`, `lastName`, `organization`, `phones[]`, `emails[]`, `notes`, `favorite`) |
@@ -638,8 +650,8 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | PUT    | `/api/events/:id`     | Update an event (editing a recurring event updates the whole series) |
 | DELETE | `/api/events/:id`     | Remove an event (deletes the whole series if recurring) |
 | DELETE | `/api/events/all`     | Remove every event                                   |
-| GET    | `/api/features`       | `{ bookmarks, contacts, calendar, files }` — never itself feature-gated |
-| PUT    | `/api/features`       | Update flags (`{ bookmarks?, contacts?, calendar?, files? }`) — 400 if all four would end up off |
+| GET    | `/api/features`       | `{ bookmarks, contacts, calendar, files, passwords }` — never itself feature-gated |
+| PUT    | `/api/features`       | Update flags (`{ bookmarks?, contacts?, calendar?, files?, passwords? }`) — 400 if all five would end up off |
 | GET    | `/api/files/locations` | List configured file locations (`{ id, name, path }[]`) |
 | POST   | `/api/files/locations` | Add a location (`{ name, path }`) — `path` must be an absolute, existing directory |
 | PUT    | `/api/files/locations/:id` | Update a location's name/path                    |
@@ -660,10 +672,20 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | POST   | `/api/files/trash/:id/restore` | Restore a trashed item to its original path (`?location=`) — 409 if something's there now |
 | DELETE | `/api/files/trash/:id` | Permanently delete one trashed item (`?location=`)      |
 | DELETE | `/api/files/trash`    | Empty a location's trash entirely (`?location=`)         |
+| GET    | `/api/passwords`      | List saved passwords, plaintext never included (`?q=` search over site/URL/username, `?favorite=1`, `?sort=name-asc\|name-desc\|created-asc\|created-desc`) |
+| POST   | `/api/passwords`      | Add an entry (`{ siteName, url?, username?, password?, notes?, favorite? }`) |
+| GET    | `/api/passwords/export` | Download every entry, decrypted, as one plain-text `.csv` file |
+| POST   | `/api/passwords/import` | Upload a `.csv` export (multipart, field `file`) — Chrome/Edge/Brave/Opera/Firefox/Safari/Bitwarden/LastPass/Dashlane column layouts auto-detected |
+| GET    | `/api/passwords/:id`  | Get a single entry, including its decrypted password  |
+| GET    | `/api/passwords/:id/reveal` | Decrypt and return just `{ password }`, for the row list's reveal/copy actions |
+| PUT    | `/api/passwords/:id`  | Update an entry                                       |
+| PUT    | `/api/passwords/:id/favorite` | Set favorite status (`{ favorite: true\|false }`) |
+| DELETE | `/api/passwords/:id`  | Remove an entry                                        |
+| DELETE | `/api/passwords/all`  | Remove every saved password                            |
 | GET    | `/api/backups`        | List restore points (`[{ name, size, modifiedAt }]`), newest first |
 | POST   | `/api/backups/run`    | Create a backup immediately (`{ modules? }`, defaults to the schedule's selection) |
 | GET    | `/api/backups/:file/modules` | Which modules a specific backup contains (`{ modules: string[] }`) |
-| GET/PUT | `/api/backups/schedule` | Get/set the backup schedule (`{ enabled, frequency: "daily"\|"weekly", retentionCount, dir, modules: string[] }`) — `modules` is any non-empty subset of `bookmarks`/`contacts`/`calendar`/`files`/`account` |
+| GET/PUT | `/api/backups/schedule` | Get/set the backup schedule (`{ enabled, frequency: "daily"\|"weekly", retentionCount, dir, modules: string[] }`) — `modules` is any non-empty subset of `bookmarks`/`contacts`/`calendar`/`files`/`passwords`/`account` |
 | GET    | `/api/backups/:file/download` | Download a backup — the raw `.tar.gz` archive, or decompressed plain `.json` for a legacy `.json.gz` one |
 | DELETE | `/api/backups/:file`  | Delete one restore point                             |
 | POST   | `/api/backups/:file/restore` | Restore a backup (`{ password, modules? }`, defaults to every module the backup contains) — returns `{ appliedModules }`; signs out every device only if `account` was applied |

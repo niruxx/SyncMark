@@ -74,7 +74,7 @@ router.post('/auth/setup', (req, res) => {
   }
 
   const features = req.body.features;
-  if (features && !features.bookmarks && !features.contacts && !features.calendar && !features.files) {
+  if (features && !features.bookmarks && !features.contacts && !features.calendar && !features.files && !features.passwords) {
     return res.status(400).json({ error: 'At least one feature must stay enabled' });
   }
 

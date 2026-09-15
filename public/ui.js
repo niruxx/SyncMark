@@ -204,6 +204,7 @@
         ['contacts', 'contacts.html'],
         ['calendar', 'calendar.html'],
         ['files', 'files.html'],
+        ['passwords', 'passwords.html'],
       ];
       const match = fallbacks.find(([key]) => features[key] !== false);
       location.replace(match ? match[1] : 'settings.html');

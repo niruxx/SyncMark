@@ -50,6 +50,10 @@
               <span class="material-symbols-outlined">folder</span>
               Files (off by default — the one feature that reads/writes the host filesystem)
             </button>
+            <button type="button" class="feature-toggle-btn" id="feature-passwords-input" aria-pressed="false">
+              <span class="material-symbols-outlined">key</span>
+              Passwords (off by default — a personal password manager)
+            </button>
           </div>
         </div>
 
@@ -68,6 +72,7 @@
         <span><span class="material-symbols-outlined">contacts</span>Contacts</span>
         <span><span class="material-symbols-outlined">calendar_month</span>Calendar</span>
         <span><span class="material-symbols-outlined">folder</span>Files</span>
+        <span><span class="material-symbols-outlined">key</span>Passwords</span>
       </div>
     </div>`;
   document.body.appendChild(page);
@@ -86,11 +91,18 @@
   const featureContactsInput = page.querySelector('#feature-contacts-input');
   const featureCalendarInput = page.querySelector('#feature-calendar-input');
   const featureFilesInput = page.querySelector('#feature-files-input');
+  const featurePasswordsInput = page.querySelector('#feature-passwords-input');
   const errorEl = page.querySelector('#lock-error');
   const backBtn = page.querySelector('#lock-back-btn');
   const submitBtn = page.querySelector('#lock-submit');
   const forgotHint = page.querySelector('#lock-forgot-hint');
-  const featureToggleBtns = [featureBookmarksInput, featureContactsInput, featureCalendarInput, featureFilesInput];
+  const featureToggleBtns = [
+    featureBookmarksInput,
+    featureContactsInput,
+    featureCalendarInput,
+    featureFilesInput,
+    featurePasswordsInput,
+  ];
 
   function setPressed(btn, on) {
     btn.setAttribute('aria-pressed', String(on));
@@ -218,8 +230,9 @@
         contacts: isPressed(featureContactsInput),
         calendar: isPressed(featureCalendarInput),
         files: isPressed(featureFilesInput),
+        passwords: isPressed(featurePasswordsInput),
       };
-      if (!features.bookmarks && !features.contacts && !features.calendar && !features.files) {
+      if (!features.bookmarks && !features.contacts && !features.calendar && !features.files && !features.passwords) {
         errorEl.textContent = 'Turn on at least one feature to continue.';
         errorEl.hidden = false;
         return;

@@ -123,6 +123,19 @@ db.exec(`
     contact_id INTEGER NOT NULL,
     PRIMARY KEY (group_id, contact_id)
   );
+
+  CREATE TABLE IF NOT EXISTS passwords (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_name TEXT NOT NULL,
+    url TEXT NOT NULL DEFAULT '',
+    username TEXT NOT NULL DEFAULT '',
+    password_enc TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    favorite INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_passwords_site ON passwords(site_name);
 `);
 
 // Migrations for databases created before these columns existed.
@@ -203,6 +216,27 @@ for (const [key, clause] of Object.entries(CONTACT_SORT_CLAUSES)) {
     FROM contacts
     WHERE (@favorite = 0 OR favorite = 1)
       AND (@tag = '' OR tags LIKE @tagLike)
+    ORDER BY ${clause}
+  `);
+}
+
+const PASSWORD_SORT_CLAUSES = {
+  'name-asc': 'site_name COLLATE NOCASE ASC',
+  'name-desc': 'site_name COLLATE NOCASE DESC',
+  'created-desc': 'created_at DESC, id DESC',
+  'created-asc': 'created_at ASC, id ASC',
+};
+
+// Lite list columns deliberately exclude password_enc/notes — same
+// on-demand-fetch precedent as contacts' photo and getContact vs.
+// listContactsBySort, just applied to the encrypted secret instead of a BLOB.
+const listPasswordsBySort = {};
+for (const [key, clause] of Object.entries(PASSWORD_SORT_CLAUSES)) {
+  listPasswordsBySort[key] = db.prepare(`
+    SELECT id, site_name, url, username, favorite, created_at, updated_at
+    FROM passwords
+    WHERE (@q = '' OR site_name LIKE @qLike OR url LIKE @qLike OR username LIKE @qLike)
+      AND (@favorite = 0 OR favorite = 1)
     ORDER BY ${clause}
   `);
 }
@@ -426,6 +460,25 @@ const statements = {
      ON CONFLICT(uid) DO UPDATE SET seq = @seq, deleted_at = datetime('now')`
   ),
 
+  // ---- passwords ----
+  insertPassword: db.prepare(
+    `INSERT INTO passwords (site_name, url, username, password_enc, notes, favorite)
+     VALUES (@siteName, @url, @username, @passwordEnc, @notes, @favorite)`
+  ),
+  listPasswordsBySort,
+  getPassword: db.prepare('SELECT * FROM passwords WHERE id = ?'),
+  updatePassword: db.prepare(
+    `UPDATE passwords SET site_name = @siteName, url = @url, username = @username,
+       password_enc = @passwordEnc, notes = @notes, favorite = @favorite, updated_at = datetime('now')
+     WHERE id = @id`
+  ),
+  setPasswordFavorite: db.prepare(
+    `UPDATE passwords SET favorite = @favorite, updated_at = datetime('now') WHERE id = @id`
+  ),
+  deletePassword: db.prepare('DELETE FROM passwords WHERE id = ?'),
+  deleteAllPasswords: db.prepare('DELETE FROM passwords'),
+  countPasswords: db.prepare('SELECT COUNT(*) as count FROM passwords'),
+
   listFileLocations: db.prepare('SELECT * FROM file_locations ORDER BY name COLLATE NOCASE ASC'),
   getFileLocation: db.prepare('SELECT * FROM file_locations WHERE id = ?'),
   getFileLocationByName: db.prepare('SELECT * FROM file_locations WHERE name = ?'),
@@ -494,6 +547,7 @@ const wipeDatabase = db.transaction(() => {
     DELETE FROM file_locations;
     DELETE FROM contact_groups;
     DELETE FROM contact_group_members;
+    DELETE FROM passwords;
   `);
 });
 
@@ -892,7 +946,7 @@ const upsertEventFromICal = db.transaction((fields) => {
 // before, so there's no "always worked" expectation to preserve, and it's the
 // one feature that reads/writes the host filesystem directly rather than
 // just app data — turning it on should be a deliberate admin choice.
-const FEATURE_DEFAULTS = { bookmarks: true, contacts: true, calendar: true, files: false };
+const FEATURE_DEFAULTS = { bookmarks: true, contacts: true, calendar: true, files: false, passwords: false };
 const FEATURE_NAMES = Object.keys(FEATURE_DEFAULTS);
 
 function isFeatureEnabled(name) {
