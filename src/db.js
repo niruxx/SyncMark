@@ -156,6 +156,13 @@ db.exec(`
     PRIMARY KEY (group_id, contact_id)
   );
 
+  -- password_enc/notes hold zero-knowledge ciphertext (iv:ciphertext, base64)
+  -- once a user has completed vault setup — see vault_keys below and
+  -- public/vaultCrypto.js. kind='note' rows are "plain secret notes" (blank
+  -- site/username, notes+attachments only) reusing this same table instead of
+  -- a parallel item type. match_rule is an optional regex/host override the
+  -- browser extension's autofill can use instead of default base-domain
+  -- matching (NULL for every entry until the user sets one explicitly).
   CREATE TABLE IF NOT EXISTS passwords (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -165,10 +172,45 @@ db.exec(`
     password_enc TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     favorite INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL DEFAULT 'login',
+    match_rule TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_passwords_site ON passwords(site_name);
+
+  -- Zero-knowledge vault key material — opaque, wrapped-DEK artifacts only.
+  -- The server can never derive the vault passphrase, recovery key, VK, RK,
+  -- or DEK from anything stored here; see public/vaultCrypto.js for the full
+  -- key hierarchy and src/routes/vault.js for how these fields are used.
+  CREATE TABLE IF NOT EXISTS vault_keys (
+    user_id INTEGER PRIMARY KEY,
+    vault_salt TEXT NOT NULL,
+    wrapped_dek_passphrase TEXT NOT NULL,
+    wrapped_dek_passphrase_iv TEXT NOT NULL,
+    recovery_salt TEXT NOT NULL,
+    wrapped_dek_recovery TEXT NOT NULL,
+    wrapped_dek_recovery_iv TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Encrypted attachments (SSH keys, tax documents, ID scans, ...) tied to a
+  -- password/note entry, encrypted client-side under the same DEK as that
+  -- entry's password/notes fields before upload — the ciphertext BLOB here is
+  -- opaque to the server, same DB-BLOB precedent as contacts.photo/users.avatar.
+  CREATE TABLE IF NOT EXISTS password_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    password_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    mime TEXT NOT NULL DEFAULT 'application/octet-stream',
+    size INTEGER NOT NULL,
+    iv TEXT NOT NULL,
+    ciphertext BLOB NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_password_attachments_password ON password_attachments(password_id);
 `);
 
 // ---------- Migrations for databases created before these columns/shapes existed ----------
@@ -295,6 +337,18 @@ function createTableSql(table) {
   throw new Error(`No rebuild schema registered for ${table}`);
 }
 
+// --- Zero-knowledge vault migration ---
+// kind/match_rule take constant defaults, so a plain ADD COLUMN is enough —
+// existing rows all become kind='login' (there was no note-only type before)
+// with no match_rule override.
+const existingPasswordColumns = db.prepare('PRAGMA table_info(passwords)').all();
+if (!existingPasswordColumns.some((col) => col.name === 'kind')) {
+  db.exec("ALTER TABLE passwords ADD COLUMN kind TEXT NOT NULL DEFAULT 'login'");
+}
+if (!existingPasswordColumns.some((col) => col.name === 'match_rule')) {
+  db.exec('ALTER TABLE passwords ADD COLUMN match_rule TEXT');
+}
+
 rebuildWithUserId('folders', ['id', 'name', 'position', 'created_at']);
 rebuildWithUserId('contact_groups', ['id', 'name', 'type', 'smart_rules', 'position', 'created_at']);
 rebuildWithUserId('file_locations', ['id', 'name', 'path', 'created_at']);
@@ -378,10 +432,12 @@ const PASSWORD_SORT_CLAUSES = {
 // Lite list columns deliberately exclude password_enc/notes — same
 // on-demand-fetch precedent as contacts' photo and getContact vs.
 // listContactsBySort, just applied to the encrypted secret instead of a BLOB.
+// (attachment_count IS NOT NULL) style flag isn't needed here since
+// attachments are fetched per-entry, not listed in bulk.
 const listPasswordsBySort = {};
 for (const [key, clause] of Object.entries(PASSWORD_SORT_CLAUSES)) {
   listPasswordsBySort[key] = db.prepare(`
-    SELECT id, site_name, url, username, favorite, created_at, updated_at
+    SELECT id, site_name, url, username, favorite, kind, match_rule, created_at, updated_at
     FROM passwords
     WHERE user_id = @userId
       AND (@q = '' OR site_name LIKE @qLike OR url LIKE @qLike OR username LIKE @qLike)
@@ -619,16 +675,19 @@ const statements = {
      ON CONFLICT(uid) DO UPDATE SET seq = @seq, deleted_at = datetime('now')`
   ),
 
-  // ---- passwords ----
+  // ---- passwords (zero-knowledge: password_enc/notes are ciphertext the
+  // client already produced — see src/routes/passwords.js) ----
   insertPassword: db.prepare(
-    `INSERT INTO passwords (user_id, site_name, url, username, password_enc, notes, favorite)
-     VALUES (@userId, @siteName, @url, @username, @passwordEnc, @notes, @favorite)`
+    `INSERT INTO passwords (user_id, site_name, url, username, password_enc, notes, favorite, kind, match_rule)
+     VALUES (@userId, @siteName, @url, @username, @passwordEnc, @notes, @favorite, @kind, @matchRule)`
   ),
   listPasswordsBySort,
   getPassword: db.prepare('SELECT * FROM passwords WHERE id = ? AND user_id = ?'),
+  listAllPasswordsRaw: db.prepare('SELECT * FROM passwords WHERE user_id = ? ORDER BY id ASC'),
   updatePassword: db.prepare(
     `UPDATE passwords SET site_name = @siteName, url = @url, username = @username,
-       password_enc = @passwordEnc, notes = @notes, favorite = @favorite, updated_at = datetime('now')
+       password_enc = @passwordEnc, notes = @notes, favorite = @favorite, kind = @kind,
+       match_rule = @matchRule, updated_at = datetime('now')
      WHERE id = @id AND user_id = @userId`
   ),
   setPasswordFavorite: db.prepare(
@@ -637,6 +696,46 @@ const statements = {
   deletePassword: db.prepare('DELETE FROM passwords WHERE id = ? AND user_id = ?'),
   deleteAllPasswords: db.prepare('DELETE FROM passwords WHERE user_id = ?'),
   countPasswords: db.prepare('SELECT COUNT(*) as count FROM passwords WHERE user_id = ?'),
+
+  // ---- zero-knowledge vault key material ----
+  getVaultKeys: db.prepare('SELECT * FROM vault_keys WHERE user_id = ?'),
+  upsertVaultKeys: db.prepare(
+    `INSERT INTO vault_keys (user_id, vault_salt, wrapped_dek_passphrase, wrapped_dek_passphrase_iv,
+       recovery_salt, wrapped_dek_recovery, wrapped_dek_recovery_iv)
+     VALUES (@userId, @vaultSalt, @wrappedDekPassphrase, @wrappedDekPassphraseIv,
+       @recoverySalt, @wrappedDekRecovery, @wrappedDekRecoveryIv)
+     ON CONFLICT(user_id) DO UPDATE SET
+       vault_salt = @vaultSalt, wrapped_dek_passphrase = @wrappedDekPassphrase,
+       wrapped_dek_passphrase_iv = @wrappedDekPassphraseIv, recovery_salt = @recoverySalt,
+       wrapped_dek_recovery = @wrappedDekRecovery, wrapped_dek_recovery_iv = @wrappedDekRecoveryIv,
+       updated_at = datetime('now')`
+  ),
+  updateVaultPassphraseWrap: db.prepare(
+    `UPDATE vault_keys SET vault_salt = @vaultSalt, wrapped_dek_passphrase = @wrappedDekPassphrase,
+       wrapped_dek_passphrase_iv = @wrappedDekPassphraseIv, updated_at = datetime('now')
+     WHERE user_id = @userId`
+  ),
+  deleteVaultKeys: db.prepare('DELETE FROM vault_keys WHERE user_id = ?'),
+
+  // ---- password attachments ----
+  listPasswordAttachments: db.prepare(
+    `SELECT id, password_id, filename, mime, size, created_at
+     FROM password_attachments WHERE password_id = ? AND user_id = ?`
+  ),
+  getPasswordAttachment: db.prepare(
+    'SELECT * FROM password_attachments WHERE id = ? AND password_id = ? AND user_id = ?'
+  ),
+  insertPasswordAttachment: db.prepare(
+    `INSERT INTO password_attachments (password_id, user_id, filename, mime, size, iv, ciphertext)
+     VALUES (@passwordId, @userId, @filename, @mime, @size, @iv, @ciphertext)`
+  ),
+  deletePasswordAttachment: db.prepare(
+    'DELETE FROM password_attachments WHERE id = ? AND password_id = ? AND user_id = ?'
+  ),
+  deletePasswordAttachmentsForPassword: db.prepare(
+    'DELETE FROM password_attachments WHERE password_id = ? AND user_id = ?'
+  ),
+  deleteAllPasswordAttachments: db.prepare('DELETE FROM password_attachments WHERE user_id = ?'),
 
   listFileLocations: db.prepare('SELECT * FROM file_locations WHERE user_id = ? ORDER BY name COLLATE NOCASE ASC'),
   getFileLocation: db.prepare('SELECT * FROM file_locations WHERE id = ? AND user_id = ?'),
@@ -706,7 +805,9 @@ const wipeUserData = db.transaction((userId) => {
   statements.deleteAllEvents.run(userId);
   db.prepare('DELETE FROM events_tombstones WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM file_locations WHERE user_id = ?').run(userId);
+  statements.deleteAllPasswordAttachments.run(userId);
   statements.deleteAllPasswords.run(userId);
+  statements.deleteVaultKeys.run(userId);
   statements.deleteSessionsForUser.run(userId);
   db.prepare('DELETE FROM app_settings WHERE key IN (?, ?, ?)').run(
     `contacts_seq:${userId}`,
@@ -736,7 +837,9 @@ const wipeDatabase = db.transaction(() => {
     DELETE FROM events;
     DELETE FROM events_tombstones;
     DELETE FROM file_locations;
+    DELETE FROM password_attachments;
     DELETE FROM passwords;
+    DELETE FROM vault_keys;
     DELETE FROM sessions;
     DELETE FROM app_settings;
     DELETE FROM users;
@@ -1163,6 +1266,20 @@ function setFeatureFlags(flags) {
   }
 }
 
+// True while any user still has passwords encrypted under the old
+// server-held global key (src/utils/vault.js) rather than their own
+// zero-knowledge vault — i.e. has passwords rows but no vault_keys row yet.
+// Once this goes false the old key is deleted for good (see PUT
+// /vault/keys) and vault.js's decrypt() never runs again.
+function anyLegacyPasswordsRemain() {
+  const row = db.prepare(
+    `SELECT COUNT(*) as count FROM passwords p
+     LEFT JOIN vault_keys vk ON vk.user_id = p.user_id
+     WHERE vk.user_id IS NULL`
+  ).get();
+  return row.count > 0;
+}
+
 function listMergedFolders(userId) {
   const counts = new Map();
   for (const row of statements.listFolders.all(userId)) counts.set(row.folder, row.count);
@@ -1186,6 +1303,7 @@ module.exports = {
   renameFolder,
   ensureFolderAncestors,
   listMergedFolders,
+  anyLegacyPasswordsRemain,
   wipeUserData,
   wipeDatabase,
   SORT_CLAUSES,

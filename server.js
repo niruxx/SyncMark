@@ -9,6 +9,7 @@ const contactsRouter = require('./src/routes/contacts');
 const eventsRouter = require('./src/routes/events');
 const filesRouter = require('./src/routes/files');
 const passwordsRouter = require('./src/routes/passwords');
+const vaultRouter = require('./src/routes/vault');
 const featuresRouter = require('./src/routes/features');
 const backupsRouter = require('./src/routes/backups');
 const adminRouter = require('./src/routes/admin');
@@ -30,7 +31,10 @@ const app = express();
 app.use(carddavRouter);
 app.use(caldavRouter);
 
-app.use(express.json());
+// Bulk CSV/vault-backup imports now travel as JSON (client encrypts before
+// sending — see src/routes/passwords.js), so the default 100kb body limit is
+// raised to match the old multipart CSV upload's 25MB cap.
+app.use(express.json({ limit: '25mb' }));
 app.use('/api', authRouter);
 app.use('/api', requireAuth, featuresRouter);
 app.use('/api', requireAuth, gateRouter('bookmarks', bookmarksRouter));
@@ -40,6 +44,7 @@ app.use('/api', requireAuth, gateRouter('contacts', contactsRouter));
 app.use('/api', requireAuth, gateRouter('calendar', eventsRouter));
 app.use('/api', requireAuth, gateRouter('files', filesRouter));
 app.use('/api', requireAuth, gateRouter('passwords', passwordsRouter));
+app.use('/api', requireAuth, gateRouter('passwords', vaultRouter));
 app.use('/api', requireAuth, gateAdmin(backupsRouter));
 app.use('/api', requireAuth, gateAdmin(adminRouter));
 app.use(express.static(path.join(__dirname, 'public')));

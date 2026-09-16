@@ -66,7 +66,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 - Calendar: click a date to open that day's events in a side panel (the month grid shrinks to make room); right-click a date or an event for a quick Add/Edit/Remove menu; import/export `.ics` (iCalendar) files
 - Settings → **How to use SyncMark**: an in-app quick tour plus step-by-step CardDAV/CalDAV sync setup for iOS, Android, Linux, and Windows
 - **File Manager tab** (off by default — turn it on in Settings → General) — browse, upload, download, view images/video, edit text files, rename, change permissions, and trash (with restore) files under one or more admin-configured, strictly sandboxed server folders ("locations") — see [File Manager](#file-manager)
-- **Passwords tab** (off by default — turn it on in Settings → General): a personal password manager — save a site's URL/username/password/notes, favorite entries, generate strong passwords, reveal or copy a password on demand, and import a `.csv` export from Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden, LastPass, Proton Pass, or Dashlane — see [Passwords](#passwords)
+- **Passwords tab** (off by default — turn it on in Settings → General): a zero-knowledge password manager — the server only ever stores ciphertext, encryption/decryption happen in your browser under a vault passphrase separate from your login password, with a one-time recovery key for when you forget it. Save logins or secure notes with encrypted attachments, generate strong random or Diceware-style passphrases, reveal or copy a password on demand, export a plain `.csv` or a still-encrypted `.json` backup, and import a `.csv` export from Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden, LastPass, Proton Pass, or Dashlane — see [Passwords](#passwords)
 - **Mobile-responsive UI**: the whole app is usable on a phone, not just squeezed to fit — a slide-in drawer for folders/groups/locations, tables become tap-friendly cards, dialogs go full-screen, and long-press stands in for right-click — see [Mobile use](#mobile-use)
 - **Automated backups**: scheduled (daily/weekly) or on-demand snapshots — including actual File Manager file contents, not just their paths — with retention, per-module selection for both backup and restore, and one-click, password-confirmed restore — see [Backup & restore](#backup--restore)
 - **Tabbed Settings**: Account / General / Bookmarks / Files / Passwords / Contacts / Calendar / Backup, each with only the controls relevant to it instead of one long scrolling page, plus a search box that filters settings by keyword across every tab at once
@@ -473,6 +473,23 @@ Either way, once *any* account exists, the setup wizard can never run again (`/a
 
 The admin account never edits a user's data directly (no "log in as" / impersonation) — it's oversight and account lifecycle management only. Regular users create their own accounts through the normal first-run setup wizard only when *no* account exists yet at all; once any account exists (including just the admin), new regular accounts are created by the admin through the portal.
 
+### Manually resetting to a fresh install
+
+Danger zone → Reset SyncMark (above) is the normal way to factory-reset the instance, but it needs a working admin login. If you don't have one — you forgot the admin password too, never set one up, or just have shell/file access to the server and want the fastest path — you can do the same reset by hand:
+
+1. **Stop the server.**
+2. **Delete the database file** and its WAL sidecar files, if present, from `data/`:
+   ```bash
+   rm -f data/bookmarks.sqlite3 data/bookmarks.sqlite3-wal data/bookmarks.sqlite3-shm
+   ```
+   (PowerShell: `Remove-Item data\bookmarks.sqlite3, data\bookmarks.sqlite3-wal, data\bookmarks.sqlite3-shm -ErrorAction SilentlyContinue`.) This one file holds every account, every user's bookmarks/contacts/calendar/passwords/File-Manager locations, and instance-wide settings like feature toggles and the backup schedule — deleting it is equivalent to what the in-app reset does internally, just without needing to sign in first. SyncMark recreates an empty database automatically the next time it starts, same as a brand-new install.
+3. **Decide what to do with `data/admin.json`**, if you have one:
+   - Leave it in place to have the *same* admin username/password bootstrapped again automatically on next start.
+   - Edit or delete it first if you want a different admin username/password — remember it's a one-time, create-only bootstrap (see [Multi-user & Admin Portal](#multi-user--admin-portal) above), so it only takes effect while no admin account exists yet, which is true immediately after step 2.
+4. **Restart the server** (`npm start`, or restart the container) and visit it in a browser — you'll land on first-run setup exactly like a brand-new install.
+
+As with the in-app reset, this never touches File Manager's actual files on disk (only the *registered locations* pointing at them are erased) or existing backups in `data/backups/` — delete those directories yourself too if you want a completely clean slate. If you're running in Docker, run these commands against the bind-mounted `data/` directory on the host rather than reaching into the container. There's no confirmation step for the manual path the way there is for the in-app one (typing `RESET`), so back up `data/` first if you're at all unsure.
+
 ## Importing bookmarks
 
 Settings → Bookmarks → **Import bookmarks** accepts a single file and figures out the format from its content — not the file extension or an explicit selector — so you just export from wherever your bookmarks currently live and upload whatever file (or the CSV/HTML file inside a `.zip`, if the service exports a zip — extract it first, SyncMark doesn't unzip archives) it gives you. Supported sources:
@@ -573,13 +590,23 @@ The **Files** tab is a personal file browser for the server itself — off by de
 
 ## Passwords
 
-The **Passwords** tab is a personal password manager — off by default (see [Feature toggles](#feature-toggles)).
+The **Passwords** tab is a zero-knowledge password manager — off by default (see [Feature toggles](#feature-toggles)).
 
-**Using it**: add an entry with a site name, URL, username, and password, plus optional notes; favorite the ones you use most. The password column stays masked (`••••••••`) until you click the eye icon to reveal it or the copy icon to copy it straight to the clipboard — either fetches the plaintext on demand rather than shipping it with the row list. The add/edit dialog also has a **Generate password** button (20 characters, drawn from the Web Crypto API's `crypto.getRandomValues`, guaranteed at least one upper/lowercase letter, digit, and symbol).
+**Zero-knowledge encryption**: all encryption and decryption happens in your browser, never on the server. The server stores only ciphertext, salts, and a couple of wrapped-key blobs — it never sees your vault passphrase, your recovery key, or any derived key, and it cannot decrypt your entries even with full access to `bookmarks.sqlite3`. This is a deliberate change from earlier versions, which encrypted passwords with a key the server itself held (see [Upgrading from an older version](#upgrading-from-an-older-version) below).
 
-**Encryption at rest**: every saved password is encrypted (AES-256-GCM) before it's written to the database, using a key generated on first use and stored in the same SQLite file. This protects against a stray glance at the raw `bookmarks.sqlite3` file — it is **not** an end-to-end/zero-knowledge vault like Bitwarden or LastPass: there's no separate master password, and anyone signed in to your SyncMark account (or with direct access to the server/database) can decrypt and reveal any entry, the same trust model the rest of SyncMark already uses for session tokens and login password hashes.
+**Vault passphrase and recovery key**: the first time you open the Passwords tab, you'll set a **vault passphrase** — separate from your SyncMark login password and never transmitted anywhere. It's used (via PBKDF2, 600,000 iterations) to derive a key that unwraps your vault's actual encryption key (the DEK). You'll also be shown a one-time **recovery key** — save it somewhere safe. If you forget your vault passphrase, the recovery key is the only way back in; if you lose both, your saved passwords, notes, and attachments **cannot be recovered by anyone, including a SyncMark administrator**. The vault locks every time you reload the page or open a new tab — this is intentional, not a bug.
 
-**Importing**: Settings → Passwords, or the Import button on the Passwords tab itself, accepts a `.csv` export from Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden, LastPass, Proton Pass, or Dashlane — the column layout is detected automatically from the header row, so there's no format picker. A Bitwarden export's non-login items (secure notes, cards, identities) are skipped; a LastPass/Dashlane/Bitwarden/Proton Pass entry's folder (or "vault," in Proton Pass's terms) or TOTP secret, if present, is folded into the entry's Notes field rather than dropped, since SyncMark doesn't have dedicated folders or TOTP codes (yet). Proton Pass keeps username and email as two separate columns — username wins as the imported login, and a distinct email is kept in Notes rather than dropped. Export downloads everything as plain-text CSV — handle and delete the downloaded file carefully, since it's not encrypted the way the database is.
+**Using it**: add a login entry with a site name, URL, username, and password, plus optional notes and encrypted file attachments (SSH keys, ID scans, etc., capped at 10 MB each) — or switch to **Secure note** for a title + notes/attachments item with no username or password. The password column stays masked (`••••••••`) until you click the eye icon to reveal it or the copy icon to copy it straight to the clipboard — either decrypts the ciphertext locally on demand rather than shipping plaintext with the row list.
+
+**Generator**: the add/edit dialog's password field has a dice icon that opens a generator panel with two modes — **Random** (configurable length, character classes, and a custom exclusion list) and **Passphrase** (Diceware-style, a configurable number of words from a built-in ~1,000-word list, with a separator, capitalization, and an optional trailing number).
+
+**Backup & export**: Export .csv produces a plain-text, human-readable export compatible with other password managers — like every other password manager's CSV export, it is **not encrypted**, so handle and delete the downloaded file carefully. Export encrypted backup produces a `.json` file that stays encrypted at rest, protected by a backup password you choose at export time; restoring it (via Import) asks for that backup password and re-encrypts every entry under your current vault key, so it's safe to store this file anywhere, including outside SyncMark. Import also still accepts a `.csv` export from Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden, LastPass, Proton Pass, or Dashlane, detected automatically from the header row.
+
+**Changing your passphrase or locking on demand**: the toolbar's key icon lets you change your vault passphrase (your recovery key stays the same); the lock icon locks the vault immediately without waiting for a reload.
+
+#### Upgrading from an older version
+
+If you saved passwords before this zero-knowledge redesign, the next time you open the Passwords tab you'll see a one-time **"Set up your password vault"** step instead of the normal unlock prompt. Setting your vault passphrase there also re-encrypts your existing entries under your new vault key in the same step — the server uses its old, now-retired encryption key exactly once, to hand your existing entries back to your browser over your already-authenticated session, and never touches it again afterward.
 
 ## Mobile use
 
@@ -700,16 +727,22 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | POST   | `/api/files/trash/:id/restore` | Restore a trashed item to its original path (`?location=`) — 409 if something's there now |
 | DELETE | `/api/files/trash/:id` | Permanently delete one trashed item (`?location=`)      |
 | DELETE | `/api/files/trash`    | Empty a location's trash entirely (`?location=`)         |
-| GET    | `/api/passwords`      | List saved passwords, plaintext never included (`?q=` search over site/URL/username, `?favorite=1`, `?sort=name-asc\|name-desc\|created-asc\|created-desc`) |
-| POST   | `/api/passwords`      | Add an entry (`{ siteName, url?, username?, password?, notes?, favorite? }`) |
-| GET    | `/api/passwords/export` | Download every entry, decrypted, as one plain-text `.csv` file |
-| POST   | `/api/passwords/import` | Upload a `.csv` export (multipart, field `file`) — Chrome/Edge/Brave/Opera/Firefox/Safari/Bitwarden/LastPass/Proton Pass/Dashlane column layouts auto-detected |
-| GET    | `/api/passwords/:id`  | Get a single entry, including its decrypted password  |
-| GET    | `/api/passwords/:id/reveal` | Decrypt and return just `{ password }`, for the row list's reveal/copy actions |
+| GET    | `/api/passwords`      | List saved entries, ciphertext never included (`?q=` search over site/URL/username, `?favorite=1`, `?sort=name-asc\|name-desc\|created-asc\|created-desc`) |
+| POST   | `/api/passwords`      | Add an entry — client-encrypted fields only (`{ siteName, url?, username?, passwordEnc?, notesEnc?, favorite?, kind? }`), server never sees plaintext |
+| GET    | `/api/passwords/export-data` | Every entry's raw ciphertext, for the client to decrypt (`.csv` export) or re-wrap as-is (encrypted `.json` backup) — the server does neither |
+| POST   | `/api/passwords/import` | Insert entries the client already encrypted (`{ entries: [{ siteName, url?, username?, passwordEnc?, notesEnc?, favorite?, kind? }] }`) |
+| GET    | `/api/passwords/:id`  | Get a single entry's ciphertext (client decrypts)      |
+| GET    | `/api/passwords/:id/reveal` | Return just `{ passwordEnc }`, for the row list's lazy reveal/copy actions |
 | PUT    | `/api/passwords/:id`  | Update an entry                                       |
 | PUT    | `/api/passwords/:id/favorite` | Set favorite status (`{ favorite: true\|false }`) |
-| DELETE | `/api/passwords/:id`  | Remove an entry                                        |
-| DELETE | `/api/passwords/all`  | Remove every saved password                            |
+| DELETE | `/api/passwords/:id`  | Remove an entry (and its attachments)                  |
+| DELETE | `/api/passwords/all`  | Remove every saved entry                               |
+| GET/POST | `/api/passwords/:id/attachments` | List an entry's attachments, or upload one (multipart: `file` = ciphertext bytes, plus `iv`/`filename`/`mime`), 10 MB cap |
+| GET/DELETE | `/api/passwords/:id/attachments/:attachmentId` | Download (ciphertext + IV/filename/mime headers, client decrypts) or delete one attachment |
+| GET/PUT | `/api/vault/keys`    | Fetch/store this user's wrapped-DEK vault key material (404 until vault setup completes) — see [Passwords](#passwords) |
+| PUT    | `/api/vault/keys/passphrase` | Replace just the passphrase-wrapped DEK (passphrase change) |
+| PUT    | `/api/vault/keys/recover` | Replace both wraps together (recovery-key flow mints a new recovery key each time) |
+| GET    | `/api/vault/legacy-passwords` | One-time bridge for pre-upgrade accounts: this user's entries decrypted under the old server-held key, so the client can re-encrypt them |
 | GET    | `/api/backups`        | List restore points (`[{ name, size, modifiedAt }]`), newest first |
 | POST   | `/api/backups/run`    | Create a backup immediately (`{ modules? }`, defaults to the schedule's selection) |
 | GET    | `/api/backups/:file/modules` | Which modules a specific backup contains (`{ modules: string[] }`) |
