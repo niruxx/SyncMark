@@ -75,14 +75,15 @@ function normalizeKeyDates(entries) {
     .filter((e) => e.label && /^\d{4}-\d{2}-\d{2}$/.test(e.date));
 }
 
-// contactId is trusted as-is here (validated against real rows) — a stale
-// reference left behind by a since-deleted contact is already swept up by
-// deleteContactById's own cleanup pass, so no extra guarding is needed here.
-function normalizeRelationships(entries) {
+// contactId is trusted as-is here (validated against real rows, scoped to
+// this user) — a stale reference left behind by a since-deleted contact is
+// already swept up by deleteContactById's own cleanup pass, so no extra
+// guarding is needed here.
+function normalizeRelationships(userId, entries) {
   if (!Array.isArray(entries)) return [];
   return entries
     .map((e) => ({ type: String(e?.type || '').trim().slice(0, 40), contactId: Number(e?.contactId) }))
-    .filter((e) => e.type && Number.isInteger(e.contactId) && statements.getContact.get(e.contactId));
+    .filter((e) => e.type && Number.isInteger(e.contactId) && statements.getContact.get(e.contactId, userId));
 }
 
 function normalizeTags(tags) {
@@ -95,7 +96,7 @@ function normalizeTags(tags) {
   return [...seen];
 }
 
-function contactFieldsFromBody(body, existing) {
+function contactFieldsFromBody(userId, body, existing) {
   const firstName = (body.firstName ?? existing?.first_name ?? '').trim();
   const lastName = (body.lastName ?? existing?.last_name ?? '').trim();
   const fullNameInput = body.fullName !== undefined ? String(body.fullName).trim() : '';
@@ -117,7 +118,11 @@ function contactFieldsFromBody(body, existing) {
     messagingHandles: jsonField('messagingHandles', 'messaging_handles', normalizeEntries),
     customFields: jsonField('customFields', 'custom_fields', normalizeCustomFields),
     keyDates: jsonField('keyDates', 'key_dates', normalizeKeyDates),
-    relationships: jsonField('relationships', 'relationships', normalizeRelationships),
+    relationships: JSON.stringify(
+      body.relationships !== undefined
+        ? normalizeRelationships(userId, body.relationships)
+        : normalizeRelationships(userId, JSON.parse(existing?.relationships || '[]'))
+    ),
     tags: jsonField('tags', 'tags', normalizeTags),
     notes: (body.notes ?? existing?.notes ?? '').trim(),
     favorite: body.favorite !== undefined ? (body.favorite ? 1 : 0) : (existing?.favorite ?? 0),
@@ -141,7 +146,7 @@ router.get('/contacts', (req, res) => {
   const tag = (req.query.tag || '').trim();
   const tagLike = tag ? `%"${tag}"%` : '';
   const sort = statements.listContactsBySort[req.query.sort] ? req.query.sort : DEFAULT_SORT;
-  const rows = statements.listContactsBySort[sort].all({ favorite, tag, tagLike });
+  const rows = statements.listContactsBySort[sort].all({ userId: req.user.id, favorite, tag, tagLike });
 
   if (!q) return res.json(rows);
 
@@ -158,7 +163,7 @@ router.get('/contacts', (req, res) => {
 });
 
 router.get('/contacts/tags', (req, res) => {
-  const rows = statements.listContactsBySort[DEFAULT_SORT].all({ favorite: 0, tag: '', tagLike: '' });
+  const rows = statements.listContactsBySort[DEFAULT_SORT].all({ userId: req.user.id, favorite: 0, tag: '', tagLike: '' });
   const tagSet = new Set();
   for (const row of rows) {
     for (const tag of JSON.parse(row.tags || '[]')) tagSet.add(tag);
@@ -169,8 +174,8 @@ router.get('/contacts/tags', (req, res) => {
 router.get('/contacts/export', (req, res) => {
   const ids = req.query.ids ? String(req.query.ids).split(',').map((s) => s.trim()).filter(Boolean) : null;
   const rows = ids
-    ? ids.map((id) => statements.getContactFullById.get(id)).filter(Boolean)
-    : statements.listContactsMeta.all().map((m) => statements.getContactFullByUid.get(m.uid));
+    ? ids.map((id) => statements.getContactFullById.get(id, req.user.id)).filter(Boolean)
+    : statements.listContactsMeta.all(req.user.id).map((m) => statements.getContactFullByUid.get(m.uid, req.user.id));
 
   if (req.query.format === 'csv') {
     res.setHeader('Content-Disposition', 'attachment; filename="syncmark-contacts.csv"');
@@ -228,63 +233,63 @@ router.post('/contacts/import', contactsFileUpload.single('file'), (req, res) =>
 
   if (fieldsList.length === 0) return res.status(422).json({ error: 'No contacts found in the uploaded file' });
 
-  const imported = insertManyContacts(fieldsList);
+  const imported = insertManyContacts(req.user.id, fieldsList);
   res.json({ imported });
 });
 
 router.post('/contacts/bulk', (req, res) => {
-  const ids = Array.isArray(req.body.ids) ? req.body.ids.filter((id) => statements.getContact.get(id)) : [];
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.filter((id) => statements.getContact.get(id, req.user.id)) : [];
   const action = req.body.action;
   if (ids.length === 0) return res.status(400).json({ error: 'No valid contact ids given' });
   if (!BULK_ACTIONS.includes(action)) return res.status(400).json({ error: 'Invalid bulk action' });
 
-  bulkContactAction(ids, action);
+  bulkContactAction(req.user.id, ids, action);
   res.json({ affected: ids.length });
 });
 
 router.get('/contacts/duplicates', (req, res) => {
-  const contacts = statements.listContactsForDuplicates.all();
-  const dismissed = getDismissedDuplicatePairs();
+  const contacts = statements.listContactsForDuplicates.all(req.user.id);
+  const dismissed = getDismissedDuplicatePairs(req.user.id);
   const groups = findDuplicateGroups(contacts, dismissed);
   res.json(groups);
 });
 
 router.get('/contacts/:id', (req, res) => {
-  const row = statements.getContact.get(req.params.id);
+  const row = statements.getContact.get(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'Contact not found' });
   res.json(row);
 });
 
 router.post('/contacts', (req, res) => {
-  const fields = contactFieldsFromBody(req.body, null);
+  const fields = contactFieldsFromBody(req.user.id, req.body, null);
   if (!fields.fullName) return res.status(400).json({ error: 'Name is required' });
 
   const uid = crypto.randomUUID();
-  const id = createContact({ uid, ...fields });
-  res.status(201).json(statements.getContact.get(id));
+  const id = createContact(req.user.id, { uid, ...fields });
+  res.status(201).json(statements.getContact.get(id, req.user.id));
 });
 
 router.put('/contacts/:id', (req, res) => {
-  const existing = statements.getContact.get(req.params.id);
+  const existing = statements.getContact.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Contact not found' });
 
-  const fields = contactFieldsFromBody(req.body, existing);
+  const fields = contactFieldsFromBody(req.user.id, req.body, existing);
   if (!fields.fullName) return res.status(400).json({ error: 'Name is required' });
 
-  updateContactFields(existing.id, fields);
-  res.json(statements.getContact.get(existing.id));
+  updateContactFields(req.user.id, existing.id, fields);
+  res.json(statements.getContact.get(existing.id, req.user.id));
 });
 
 router.put('/contacts/:id/favorite', (req, res) => {
-  const existing = statements.getContact.get(req.params.id);
+  const existing = statements.getContact.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Contact not found' });
 
-  setContactFavoriteSeq(existing.id, req.body.favorite ? 1 : 0);
-  res.json(statements.getContact.get(existing.id));
+  setContactFavoriteSeq(req.user.id, existing.id, req.body.favorite ? 1 : 0);
+  res.json(statements.getContact.get(existing.id, req.user.id));
 });
 
 router.get('/contacts/:id/photo', (req, res) => {
-  const row = statements.getContactPhoto.get(req.params.id);
+  const row = statements.getContactPhoto.get(req.params.id, req.user.id);
   if (!row || !row.photo) return res.status(404).json({ error: 'No photo set' });
 
   const mime = PHOTO_MIME_TYPES.includes(row.photo_mime) ? row.photo_mime : 'application/octet-stream';
@@ -296,7 +301,7 @@ router.get('/contacts/:id/photo', (req, res) => {
 });
 
 router.post('/contacts/:id/photo', (req, res) => {
-  const existing = statements.getContact.get(req.params.id);
+  const existing = statements.getContact.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Contact not found' });
 
   photoUpload.single('photo')(req, res, (err) => {
@@ -309,29 +314,29 @@ router.post('/contacts/:id/photo', (req, res) => {
       return res.status(400).json({ error: 'Picture must be a PNG, JPEG, GIF, or WebP image' });
     }
 
-    setContactPhotoSeq(existing.id, req.file.buffer, req.file.mimetype);
+    setContactPhotoSeq(req.user.id, existing.id, req.file.buffer, req.file.mimetype);
     res.status(201).json({ ok: true });
   });
 });
 
 router.delete('/contacts/:id/photo', (req, res) => {
-  const existing = statements.getContact.get(req.params.id);
+  const existing = statements.getContact.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Contact not found' });
 
-  clearContactPhotoSeq(existing.id);
+  clearContactPhotoSeq(req.user.id, existing.id);
   res.status(204).end();
 });
 
 router.delete('/contacts/all', (req, res) => {
-  statements.deleteAllContacts.run();
+  statements.deleteAllContacts.run(req.user.id);
   res.status(204).end();
 });
 
 router.delete('/contacts/:id', (req, res) => {
-  const existing = statements.getContact.get(req.params.id);
+  const existing = statements.getContact.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Contact not found' });
 
-  deleteContactById(existing.id);
+  deleteContactById(req.user.id, existing.id);
   res.status(204).end();
 });
 
@@ -343,7 +348,7 @@ router.post('/contacts/merge', (req, res) => {
   if (!Number.isInteger(primaryId)) return res.status(400).json({ error: 'primaryId is required' });
   if (mergeIds.length === 0) return res.status(400).json({ error: 'mergeIds must be a non-empty array' });
 
-  const merged = mergeContacts(primaryId, mergeIds);
+  const merged = mergeContacts(req.user.id, primaryId, mergeIds);
   if (!merged) return res.status(404).json({ error: 'Contact not found' });
   res.json(merged);
 });
@@ -356,7 +361,7 @@ router.post('/contacts/duplicates/dismiss', (req, res) => {
   for (let i = 0; i < ids.length; i += 1) {
     for (let j = i + 1; j < ids.length; j += 1) keys.push(pairKey(ids[i], ids[j]));
   }
-  addDismissedDuplicatePairs(keys);
+  addDismissedDuplicatePairs(req.user.id, keys);
   res.status(204).end();
 });
 
@@ -396,7 +401,7 @@ function matchesSmartRule(contact, rule) {
 }
 
 router.get('/contact-groups', (req, res) => {
-  res.json(statements.listContactGroups.all());
+  res.json(statements.listContactGroups.all(req.user.id));
 });
 
 router.post('/contact-groups', (req, res) => {
@@ -407,8 +412,8 @@ router.post('/contact-groups', (req, res) => {
   const smartRules = type === 'smart' ? JSON.stringify(normalizeSmartRules(req.body.smartRules)) : null;
 
   try {
-    const result = statements.insertContactGroup.run({ name, type, smartRules });
-    res.status(201).json(statements.getContactGroup.get(result.lastInsertRowid));
+    const result = statements.insertContactGroup.run({ userId: req.user.id, name, type, smartRules });
+    res.status(201).json(statements.getContactGroup.get(result.lastInsertRowid, req.user.id));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return res.status(409).json({ error: 'A group with that name already exists' });
     throw err;
@@ -416,11 +421,11 @@ router.post('/contact-groups', (req, res) => {
 });
 
 router.put('/contact-groups/reorder', (req, res) => {
-  const existing = statements.getContactGroup.get(req.body.id);
+  const existing = statements.getContactGroup.get(req.body.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Group not found' });
 
-  const before = req.body.beforeId ? statements.getContactGroup.get(req.body.beforeId) : null;
-  const after = req.body.afterId ? statements.getContactGroup.get(req.body.afterId) : null;
+  const before = req.body.beforeId ? statements.getContactGroup.get(req.body.beforeId, req.user.id) : null;
+  const after = req.body.afterId ? statements.getContactGroup.get(req.body.afterId, req.user.id) : null;
 
   let position;
   if (before && after) position = (before.position + after.position) / 2;
@@ -428,12 +433,12 @@ router.put('/contact-groups/reorder', (req, res) => {
   else if (after) position = after.position - 1;
   else position = 0;
 
-  statements.setContactGroupPosition.run({ id: existing.id, position });
-  res.json(statements.getContactGroup.get(existing.id));
+  statements.setContactGroupPosition.run({ id: existing.id, userId: req.user.id, position });
+  res.json(statements.getContactGroup.get(existing.id, req.user.id));
 });
 
 router.put('/contact-groups/:id', (req, res) => {
-  const existing = statements.getContactGroup.get(req.params.id);
+  const existing = statements.getContactGroup.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Group not found' });
 
   const name = (req.body.name ?? existing.name).trim();
@@ -445,8 +450,8 @@ router.put('/contact-groups/:id', (req, res) => {
       : null;
 
   try {
-    statements.updateContactGroup.run({ id: existing.id, name, type: existing.type, smartRules });
-    res.json(statements.getContactGroup.get(existing.id));
+    statements.updateContactGroup.run({ id: existing.id, userId: req.user.id, name, type: existing.type, smartRules });
+    res.json(statements.getContactGroup.get(existing.id, req.user.id));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return res.status(409).json({ error: 'A group with that name already exists' });
     throw err;
@@ -454,18 +459,18 @@ router.put('/contact-groups/:id', (req, res) => {
 });
 
 router.delete('/contact-groups/:id', (req, res) => {
-  const existing = statements.getContactGroup.get(req.params.id);
+  const existing = statements.getContactGroup.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Group not found' });
 
-  deleteContactGroup(existing.id);
+  deleteContactGroup(req.user.id, existing.id);
   res.status(204).end();
 });
 
 router.post('/contact-groups/:id/members/:contactId', (req, res) => {
-  const group = statements.getContactGroup.get(req.params.id);
+  const group = statements.getContactGroup.get(req.params.id, req.user.id);
   if (!group) return res.status(404).json({ error: 'Group not found' });
   if (group.type !== 'manual') return res.status(400).json({ error: 'Smart groups have no manual membership' });
-  const contact = statements.getContact.get(req.params.contactId);
+  const contact = statements.getContact.get(req.params.contactId, req.user.id);
   if (!contact) return res.status(404).json({ error: 'Contact not found' });
 
   statements.addContactGroupMember.run({ groupId: group.id, contactId: contact.id });
@@ -473,7 +478,7 @@ router.post('/contact-groups/:id/members/:contactId', (req, res) => {
 });
 
 router.delete('/contact-groups/:id/members/:contactId', (req, res) => {
-  const group = statements.getContactGroup.get(req.params.id);
+  const group = statements.getContactGroup.get(req.params.id, req.user.id);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
   statements.removeContactGroupMember.run({ groupId: group.id, contactId: req.params.contactId });
@@ -481,16 +486,16 @@ router.delete('/contact-groups/:id/members/:contactId', (req, res) => {
 });
 
 router.get('/contact-groups/:id/contacts', (req, res) => {
-  const group = statements.getContactGroup.get(req.params.id);
+  const group = statements.getContactGroup.get(req.params.id, req.user.id);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
   if (group.type === 'manual') {
     const ids = statements.listContactGroupMemberIds.all(group.id).map((r) => r.contact_id);
-    return res.json(ids.map((id) => statements.getContact.get(id)).filter(Boolean));
+    return res.json(ids.map((id) => statements.getContact.get(id, req.user.id)).filter(Boolean));
   }
 
   const rules = normalizeSmartRules(JSON.parse(group.smart_rules || '[]'));
-  const all = statements.listContactsBySort[DEFAULT_SORT].all({ favorite: 0, tag: '', tagLike: '' });
+  const all = statements.listContactsBySort[DEFAULT_SORT].all({ userId: req.user.id, favorite: 0, tag: '', tagLike: '' });
   res.json(all.filter((contact) => rules.every((rule) => matchesSmartRule(contact, rule))));
 });
 

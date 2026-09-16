@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const multer = require('multer');
-const { statements, wipeDatabase, setFeatureFlags } = require('../db');
+const { statements, wipeUserData, setFeatureFlags } = require('../db');
 const { hashPassword, verifyPassword } = require('../utils/password');
 const { parseCookies } = require('../utils/cookies');
 const { requireAuth, getSession } = require('../middleware/auth');
@@ -58,19 +58,38 @@ router.get('/auth/status', (req, res) => {
   const { count } = statements.countUsers.get();
   if (count === 0) return res.json({ setupRequired: true, authenticated: false });
 
-  res.json({ setupRequired: false, authenticated: Boolean(getSession(req)) });
+  const session = getSession(req);
+  const user = session ? statements.getUserById.get(session.user_id) : null;
+  if (!user || !user.enabled) return res.json({ setupRequired: false, authenticated: false });
+
+  res.json({ setupRequired: false, authenticated: true, role: user.role });
 });
 
+// First-run only (see countUsers check below — this can never run again once
+// any account exists, admin included, so an operator who provisions the
+// admin via data/admin.json before first visiting the browser never sees
+// this wizard at all; they sign in as admin and create regular users from
+// the Admin Portal instead). Creates both the regular account signing in
+// here *and* the master admin account (fixed username "admin") in one step,
+// so a fresh interactive install doesn't need a separate data/admin.json —
+// that file remains the path for headless/scripted deployments.
 router.post('/auth/setup', (req, res) => {
   const { count } = statements.countUsers.get();
   if (count > 0) return res.status(409).json({ error: 'Setup has already been completed' });
 
   const username = (req.body.username || '').trim();
   const password = req.body.password || '';
+  const adminPassword = req.body.adminPassword || '';
 
   if (!username) return res.status(400).json({ error: 'Username is required' });
+  if (username.toLowerCase() === 'admin') {
+    return res.status(400).json({ error: '"admin" is reserved for the administrator account' });
+  }
   if (password.length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+  if (adminPassword.length < 8) {
+    return res.status(400).json({ error: 'Admin password must be at least 8 characters' });
   }
 
   const features = req.body.features;
@@ -78,8 +97,8 @@ router.post('/auth/setup', (req, res) => {
     return res.status(400).json({ error: 'At least one feature must stay enabled' });
   }
 
-  const passwordHash = hashPassword(password);
-  const result = statements.insertUser.run({ username, passwordHash });
+  const result = statements.insertUser.run({ username, passwordHash: hashPassword(password), role: 'user' });
+  statements.insertUser.run({ username: 'admin', passwordHash: hashPassword(adminPassword), role: 'admin' });
   if (features) setFeatureFlags(features);
 
   const { token, ms } = createSession(result.lastInsertRowid);
@@ -97,10 +116,13 @@ router.post('/auth/login', (req, res) => {
   if (!user || !verifyPassword(password, user.password_hash)) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
+  if (!user.enabled) {
+    return res.status(403).json({ error: 'This account has been disabled' });
+  }
 
   const { token, ms } = createSession(user.id);
   setSessionCookie(res, token, ms);
-  res.json({ ok: true });
+  res.json({ ok: true, role: user.role });
 });
 
 router.post('/auth/logout', (req, res) => {
@@ -222,7 +244,7 @@ router.delete('/auth/account', requireAuth, (req, res) => {
     return res.status(401).json({ error: 'Incorrect password' });
   }
 
-  wipeDatabase();
+  wipeUserData(user.id);
   clearSessionCookie(res);
   res.status(204).end();
 });

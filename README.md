@@ -17,6 +17,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
   - [Reinstalling via a fresh `git clone`](#reinstalling-via-a-fresh-git-clone-keeping-your-data)
   - [Downloading a fresh copy without git](#downloading-a-fresh-copy-without-git)
 - [Configuration](#configuration)
+- [Multi-user & Admin Portal](#multi-user--admin-portal)
 - [Importing bookmarks](#importing-bookmarks)
   - [Exporting bookmarks](#exporting-bookmarks)
 - [Browser extensions](#browser-extensions)
@@ -34,7 +35,8 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 - Material Design 3 interface in the Google Photos idiom: tonal surfaces, pill-shaped nav and buttons, a prominent rounded search bar in the app bar, Material Symbols icons, elevation instead of borders, and Roboto throughout — plus deliberately-paced animated transitions between pages (via the CSS View Transitions API where supported, with an equivalent hand-rolled fade for browsers without it, e.g. Firefox)
 - Light and dark themes, both built on the same Material tonal palette (light by default; switch in Settings → Appearance)
 - A subtle, slow-drifting animated gradient behind the app (off automatically for anyone with reduced-motion preferences set) — only ever shown once you're signed in, never behind the sign-in/register screen
-- **A dedicated sign-in/register page on first run**: the first person to open SyncMark lands on a clean, standalone welcome page — a two-step wizard (username/password, then which of Bookmarks/Contacts/Calendar to turn on) rather than a dialog over a half-loaded app; after that, every visit opens a plain sign-in page before anything else loads. No email/SMTP involved anywhere — see [Resetting a forgotten password](#resetting-a-forgotten-password) for the CLI-based recovery path instead
+- **A dedicated sign-in/register page on first run**: the first person to open SyncMark lands on a clean, standalone welcome page — a four-step wizard (your username/password + the admin account's password, a color scheme, light/dark, then which of Bookmarks/Contacts/Calendar/Files/Passwords to turn on — each choice previewed live against the wizard itself) rather than a dialog over a half-loaded app; after that, every visit opens a plain sign-in page before anything else loads. No email/SMTP involved anywhere — see [Resetting a forgotten password](#resetting-a-forgotten-password) for the CLI-based recovery path instead
+- **Multi-user, with a separate Admin Portal**: every account's bookmarks/contacts/calendar/passwords/files are completely private to it; a master admin account (bootstrapped from `data/admin.json`) creates and manages other users' accounts — rename, reset password, disable/enable, delete, and a read-only view of what's in an account — without ever seeing a saved password's secret or editing anyone's data directly. See [Multi-user & Admin Portal](#multi-user--admin-portal)
 - **Feature toggles** (Settings → General, also set during first-run): turn Bookmarks/Contacts/Calendar/Files/Passwords on or off — disabling one hard-blocks its API and CardDAV/CalDAV routes, not just its nav tab — see [Feature toggles](#feature-toggles)
 - Click the "SyncMark" title in the top left from anywhere to jump back to your bookmarks
 - Configurable session length (Settings → Session): stay signed in for 5 minutes, 1 hour, 30 days, or permanently (never asked again) — applies the next time you sign in
@@ -151,7 +153,7 @@ npm start
 You should see `SyncMark running at http://localhost:3000`.
 
 **8. Open it and finish setup.**
-On the same machine, visit `http://localhost:3000`. Follow the on-screen two-step wizard: your username and password, then which tabs to turn on (Bookmarks/Contacts/Calendar default on, Files defaults off since it reads/writes the server filesystem — all changeable later in Settings → General → Features).
+On the same machine, visit `http://localhost:3000`. Follow the on-screen four-step wizard: your username/password plus a password for the separate admin account (see [Multi-user & Admin Portal](#multi-user--admin-portal)), a color scheme, light or dark, then which tabs to turn on (Bookmarks/Contacts/Calendar default on, Files and Passwords default off — all changeable later in Settings → General → Features).
 
 **9. (Optional) Reach it from your phone or another device on the same network.**
 Find the server's LAN IP (`ip addr show` or `hostname -I`), then open port 3000 to your LAN if a firewall is active:
@@ -381,7 +383,7 @@ Invoke-WebRequest -Uri https://github.com/<you>/SyncMark/archive/refs/heads/main
 Expand-Archive syncmark-latest.zip -DestinationPath .
 ```
 
-Swap `refs/heads/main` for a specific tag (e.g. `refs/tags/v1.1.0`) if you'd rather pin to a released version than always take the tip of `main`.
+Swap `refs/heads/main` for a specific tag (e.g. `refs/tags/v1.2.0`) if you'd rather pin to a released version than always take the tip of `main`.
 
 This trades away git's incremental `pull` (you're always downloading the whole source tree, not a diff) for not needing git on the machine at all — same data-safety guarantee either way, just a different way of getting the new code onto disk. If git is available, the [git clone method](#reinstalling-via-a-fresh-git-clone-keeping-your-data) above is simpler for repeat updates since it doesn't involve manually finding and extracting a new zip each time.
 
@@ -399,29 +401,32 @@ Everything is configured through environment variables at the process level, or 
 | --- | --- | --- |
 | Port | `PORT` env var (default `3000`) | e.g. `PORT=8080 npm start` |
 | Data location | fixed at `data/bookmarks.sqlite3` | see [Data & backups](#data--backups) below |
-| Theme, default view | Settings page | stored in the browser's `localStorage`, per-browser |
+| Theme, color scheme, default view | Settings page (also asked during first-run setup) | five color schemes (Blue/Green/Purple/Orange/Rose) × light/dark; stored in the browser's `localStorage`, per-browser |
 | Session length | Settings → Session | `5m` / `hourly` / `monthly` / `permanent`; stored server-side, applies to your *next* sign-in |
 | Account (username/password) | Settings → Account | requires your current password to change |
 | Profile picture | Settings → Account | stored in the database, so it survives updates and follows you to any browser |
-| Feature toggles | Settings → General → Features | Bookmarks/Contacts/Calendar on by default, Files off by default — see [Feature toggles](#feature-toggles) below |
+| Feature toggles | Settings → General → Features | Bookmarks/Contacts/Calendar on by default, Files and Passwords off by default — see [Feature toggles](#feature-toggles) below |
 | File locations | Settings → Files | name + absolute server path per location — see [File Manager](#file-manager) below |
-| Backup schedule | Settings → Backup | off by default; frequency, retention count, and an optional custom directory — see [Backup & restore](#backup--restore) below |
+| Master admin account | `data/admin.json` | one-time bootstrap for the Admin Portal — see [Multi-user & Admin Portal](#multi-user--admin-portal) below |
+| Backup schedule | Admin Portal → Backups | admin-only; off by default; frequency, retention count, and an optional custom directory — see [Backup & restore](#backup--restore) below |
 
 ### Resetting a forgotten password
 
-SyncMark has no email/SMTP integration and no public "forgot password" form by design — that would be an attack surface for an app that otherwise has none. Instead, an operator with shell access to the server (which is the only way anyone should be able to reset it, since SyncMark protects one account for the whole instance) runs:
+SyncMark has no email/SMTP integration and no public "forgot password" form by design — that would be an attack surface for an app that otherwise has none. Instead, an operator with shell access to the server runs:
 
 ```bash
-npm run reset-password -- yourNewPassword123
+npm run reset-password -- yourUsername yourNewPassword123
 ```
 
 or, to be prompted instead of putting the password on the command line (and in your shell history):
 
 ```bash
-npm run reset-password
+npm run reset-password -- yourUsername
 ```
 
-The prompt does **not** mask input, so only run it somewhere private. Either way it updates the account in `data/bookmarks.sqlite3` directly and signs every device out (`DELETE FROM sessions`), which is the sensible default whether you forgot the password or are resetting it because of a suspected compromise. It refuses to do anything if no account exists yet (nothing to reset — run first-run setup instead) or the new password is under 8 characters.
+If the instance has only ever had one account, the username can be omitted (`npm run reset-password -- yourNewPassword123`, or no arguments at all to be prompted for both) — the script only needs it to disambiguate once more than one account exists. This is also how a forgotten **admin** password gets recovered; there's no separate admin-specific recovery path.
+
+The prompt does **not** mask input, so only run it somewhere private. Either way it updates the account in `data/bookmarks.sqlite3` directly and signs every device out for that account (`DELETE FROM sessions WHERE user_id = ...`), which is the sensible default whether you forgot the password or are resetting it because of a suspected compromise. It refuses to do anything if no account exists yet (nothing to reset — run first-run setup instead) or the new password is under 8 characters.
 
 ### Feature toggles
 
@@ -444,6 +449,29 @@ PORT=8080 npm start
 ```
 
 (PowerShell: `$env:PORT=8080; npm start`. Docker/Compose: change the left-hand side of the `ports:` mapping — the app inside the container always listens on 3000.)
+
+## Multi-user & Admin Portal
+
+SyncMark is multi-tenant: every account — bookmarks, contacts, calendar, passwords, and File Manager locations — is completely private to that account, with no shared data between users. A **master admin account** (fixed username `admin`) manages the user list from a dedicated Admin Portal instead of using the app itself; it has no bookmarks/contacts/etc. of its own.
+
+**Creating the admin account** happens one of two ways:
+
+1. **The first-run setup wizard** (interactive, the common case) — its first screen creates both your own account *and* the admin account's password together, so a fresh interactive install needs nothing extra. `admin` is reserved: the wizard rejects it as your own username, since that's the admin account's fixed name.
+2. **`data/admin.json`** (for headless/scripted deployments, e.g. Docker with no browser involved) — drop a file next to the database (see `data/admin.example.json` for the shape):
+
+   ```json
+   { "username": "admin", "password": "at-least-8-characters" }
+   ```
+
+   Restart the server — it logs `Created admin account "admin" from data/admin.json` once. This is a **one-time bootstrap, not an ongoing sync**: once that account exists, the file is never read again to overwrite its password, so changing the admin's password later through the app won't get silently reverted by a stale file still sitting in `data/`. If an admin already exists (e.g. the setup wizard already created one), this file is simply ignored. `data/admin.json` is gitignored, same as the database itself, since it holds a live credential.
+
+Either way, once *any* account exists, the setup wizard can never run again (`/api/auth/setup` 409s) — an upgraded install with an existing account is completely unaffected by any of this until its operator deliberately does one of the two things above. Signing in as the admin lands on `admin.html` instead of the normal app. From there:
+
+- **Users tab**: add a user (username + password), rename or reset a user's password, disable (blocks login and immediately signs out every active session for that account) or re-enable, delete (permanently wipes that one account and everything it owns), and view a **read-only** summary of what's in an account — bookmark titles/URLs, contact names, event titles/times, file location names/paths, and saved-password *entries* (site, URL, username). The admin can never mint another admin account from the portal (only `data/admin.json` can) and can never see a saved password's actual secret — only that an entry exists and what site/username it's for.
+- **Backups tab**: covers every user's data at once — see [Backup & restore](#backup--restore) below. Admin-only, since a restore can overwrite every account's data in one action.
+- **Danger zone → Reset SyncMark**: permanently deletes *every* account — including the admin's own — and everything anyone owns, putting the instance back to first-run setup exactly like a brand-new install. This is the one action in the app gated by more than a password: the confirm button stays disabled until you also type `RESET` in a second field, since there's no smaller undo path the way there is for deleting a single user. It never touches File Manager files on disk or existing backups in `data/backups` — only the database.
+
+The admin account never edits a user's data directly (no "log in as" / impersonation) — it's oversight and account lifecycle management only. Regular users create their own accounts through the normal first-run setup wizard only when *no* account exists yet at all; once any account exists (including just the admin), new regular accounts are created by the admin through the portal.
 
 ## Importing bookmarks
 
@@ -569,17 +597,17 @@ There's no installable app or offline support (no PWA manifest/service worker) �
 
 ## Backup & restore
 
-Settings → Backup covers both scheduled and one-off backups of the whole instance, split into six independent **modules** — Bookmarks, Contacts (with groups), Calendar, Files, Passwords, and Account & settings — each of which can be included or left out separately, for both backing up and restoring.
+Admin Portal → Backups covers both scheduled and one-off backups of **every user's data at once**, split into six independent **modules** — Bookmarks, Contacts (with groups), Calendar, Files, Passwords, and Accounts & settings — each of which can be included or left out separately, for both backing up and restoring. This lives in the Admin Portal rather than the regular Settings page, and is admin-only, since a restore can overwrite every account's data in one action — a regular user's own Settings page has no backup controls at all.
 
-**What a backup contains**: a gzip-compressed `.tar.gz` archive — `db.json` (the selected modules' database rows) plus, when the Files module is included, the actual file contents of every configured File Manager location, not just their registered paths. Active sessions are never included (restoring the Account module signs every device out on purpose — see below). It's a real, standard tar archive: openable with any ordinary tool, not just SyncMark itself.
+**What a backup contains**: a gzip-compressed `.tar.gz` archive — `db.json` (the selected modules' database rows, for every user) plus, when the Files module is included, the actual file contents of every configured File Manager location across every user, not just their registered paths. Active sessions are never included (restoring the Accounts module signs every device out on purpose — see below). It's a real, standard tar archive: openable with any ordinary tool, not just SyncMark itself.
 
-**Choosing what to back up**: the checkbox row under "What to back up" applies to both scheduled backups and "Back up now." Leaving Files selected means backup size and time scale with however much you keep in File Manager locations — worth knowing before pointing a location at something huge.
+**Choosing what to back up**: the checkbox row under "What to back up" applies to both scheduled backups and "Back up now." Leaving Files selected means backup size and time scale with however much every user keeps in File Manager locations combined — worth knowing before pointing a location at something huge.
 
 **Automatic backups** (off by default): turn on "Back up automatically," choose daily or weekly, and how many backups to keep (oldest are pruned once you're over the count). By default backups are written to `data/backups/` on the server, but you can point the directory field at anywhere else the server can write to — including a folder synced by rclone, Dropbox, OneDrive, or similar, if you want an actual off-machine copy. SyncMark itself has no cloud-provider integration; pointing it at a synced folder is what gets a copy off the machine.
 
 **Manual backups**: "Back up now" creates one immediately with the current module selection, independent of the schedule.
 
-**Restoring**: each entry in the restore-points list shows which modules it contains, and can be downloaded, deleted, or restored. The restore dialog lets you pick which of *those* modules to actually apply — restoring just Bookmarks from a backup leaves your current Contacts/Calendar/Files/Account completely untouched. Database modules (Bookmarks/Contacts/Calendar/Account) fully replace their current data when applied — that part is as destructive as it sounds, so it's password-confirmed like deleting the account. **Files is the one exception**: restoring it only adds and overwrites files from the backup — anything present in a location that isn't in the backup is left alone, never deleted, since real files on disk aren't as trivially recoverable as a database row is. Every device is signed out only if the Account module was applied, since that's the only module that can change who's logged in. Restoring runs live, through the server's existing database connection; there's no need to stop or restart the server.
+**Restoring**: each entry in the restore-points list shows which modules it contains, and can be downloaded, deleted, or restored. The restore dialog lets you pick which of *those* modules to actually apply — restoring just Bookmarks from a backup leaves everyone's current Contacts/Calendar/Files/Accounts completely untouched. Database modules (Bookmarks/Contacts/Calendar/Accounts) fully replace their current data when applied, for every user at once — that part is as destructive as it sounds, so it's password-confirmed with the admin's own password. **Files is the one exception**: restoring it only adds and overwrites files from the backup — anything present in a location that isn't in the backup is left alone, never deleted, since real files on disk aren't as trivially recoverable as a database row is. Every device (every user's, not just the admin's) is signed out only if the Accounts module was applied, since that's the only module that can change who's logged in. Restoring runs live, through the server's existing database connection; there's no need to stop or restart the server.
 
 **Older backups keep working**: a `.json.gz` backup made before this module system existed (database-only, no file contents) still lists, downloads, and restores correctly — it's just treated as containing every module.
 
@@ -587,18 +615,18 @@ Settings → Backup covers both scheduled and one-off backups of the whole insta
 
 ## API
 
-All `/api/*` routes below except the `/api/auth/*` ones require a valid session cookie (401 otherwise). Static files (the HTML/CSS/JS themselves) are always public — they're what render the sign-in screen. The CardDAV server at `/dav/` (and the `/.well-known/carddav` redirect to it) is separate from `/api` and uses HTTP Basic Auth instead of the session cookie — see [Contacts & CardDAV sync](#contacts--carddav-sync).
+All `/api/*` routes below except the `/api/auth/*` ones require a valid session cookie (401 otherwise). `/api/admin/*` and `/api/backups/*` additionally require the signed-in account to be the admin — a non-admin gets a plain 404 rather than a 403, same as any other endpoint that doesn't apply to it. Every other route (bookmarks/contacts/events/passwords/files) only ever operates on the signed-in account's *own* data — there is no path to read or write another user's rows through the regular API. Static files (the HTML/CSS/JS themselves) are always public — they're what render the sign-in screen. The CardDAV server at `/dav/` (and the `/.well-known/carddav` redirect to it) is separate from `/api` and uses HTTP Basic Auth instead of the session cookie — see [Contacts & CardDAV sync](#contacts--carddav-sync).
 
 | Method | Path                  | Description                                       |
 | ------ | --------------------- | -------------------------------------------------- |
-| GET    | `/api/auth/status`    | `{ setupRequired, authenticated }`                   |
-| POST   | `/api/auth/setup`     | First-run only: create the account (`{ username, password, features? }`), signs you in — `features` defaults every key not given |
-| POST   | `/api/auth/login`     | `{ username, password }`                             |
+| GET    | `/api/auth/status`    | `{ setupRequired, authenticated, role? }` — `role` (`"user"\|"admin"`) is included only when authenticated |
+| POST   | `/api/auth/setup`     | First-run only (no account of any kind exists yet): create a regular account (`{ username, password, features? }`), signs you in — `features` defaults every key not given |
+| POST   | `/api/auth/login`     | `{ username, password }` — returns `{ ok, role }`; `403` if the account is disabled |
 | POST   | `/api/auth/logout`    | Clear the current session                            |
 | GET/PUT | `/api/auth/settings` | Get/set the session-duration preference (`{ sessionDuration: "5m"\|"hourly"\|"monthly"\|"permanent" }`) — requires auth |
 | GET    | `/api/auth/me`        | `{ username }` for the signed-in account              |
 | PUT    | `/api/auth/account`   | Change username and/or password (`{ currentPassword, username?, newPassword? }`) |
-| DELETE | `/api/auth/account`   | Delete the account and wipe all data (`{ password }`) — cannot be undone |
+| DELETE | `/api/auth/account`   | Delete your own account and wipe everything it owns (`{ password }`) — cannot be undone; never touches any other account |
 | GET    | `/api/auth/avatar`    | The profile picture's raw bytes (404 if none set)     |
 | POST   | `/api/auth/avatar`    | Upload a profile picture (multipart, field `avatar`; PNG/JPEG/GIF/WebP, ≤ 2 MB) |
 | DELETE | `/api/auth/avatar`    | Remove the profile picture                            |
@@ -689,6 +717,13 @@ All `/api/*` routes below except the `/api/auth/*` ones require a valid session 
 | GET    | `/api/backups/:file/download` | Download a backup — the raw `.tar.gz` archive, or decompressed plain `.json` for a legacy `.json.gz` one |
 | DELETE | `/api/backups/:file`  | Delete one restore point                             |
 | POST   | `/api/backups/:file/restore` | Restore a backup (`{ password, modules? }`, defaults to every module the backup contains) — returns `{ appliedModules }`; signs out every device only if `account` was applied |
+| GET    | `/api/admin/users`    | List every regular (non-admin) account: `{ id, username, enabled, created_at, counts: { bookmarks, contacts, events, passwords, fileLocations } }[]` |
+| POST   | `/api/admin/users`    | Create a regular account (`{ username, password }`) — always `role: "user"`; admins can only be created via `data/admin.json` |
+| GET    | `/api/admin/users/:id` | Read-only detail view: `{ user, bookmarks, contacts, events, fileLocations, passwords }` — a saved password's site/URL/username, never its secret |
+| PUT    | `/api/admin/users/:id` | Rename and/or reset password (`{ username?, password? }`) — a password reset signs that account out everywhere |
+| PUT    | `/api/admin/users/:id/enabled` | Enable/disable (`{ enabled: true\|false }`) — disabling immediately signs that account out everywhere |
+| DELETE | `/api/admin/users/:id` | Delete that account and everything it owns — cannot be undone |
+| POST   | `/api/admin/reset` | Factory reset — delete every account (admin included) and everything anyone owns (`{ password, confirm }`, `confirm` must be the literal string `"RESET"`) — cannot be undone; returns the instance to first-run setup |
 
 Favicons are rendered client-side via Google's public favicon service (`s2/favicons`), based on each bookmark's domain — no favicon data is stored server-side. Theme and default view preferences are stored in the browser's `localStorage`.
 

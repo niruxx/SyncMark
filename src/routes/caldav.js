@@ -60,8 +60,8 @@ function parseSyncToken(token) {
   return m ? parseInt(m[1], 10) : 0;
 }
 
-function calendarCollectionProps() {
-  const seq = currentEventsSeq();
+function calendarCollectionProps(userId) {
+  const seq = currentEventsSeq(userId);
   return (
     '<d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>' +
     '<d:displayname>SyncMark Calendar</d:displayname>' +
@@ -112,23 +112,23 @@ function requireOwnUser(req, res) {
 
 router.propfind(['/dav/calendars/:username', '/dav/calendars/:username/'], (req, res) => {
   if (!requireOwnUser(req, res)) return;
-  const { username } = req.davUser;
+  const { username, id: userId } = req.davUser;
   const depth = req.headers.depth === '1' ? 1 : 0;
   const homeProps = `<d:resourcetype><d:collection/></d:resourcetype><d:displayname>${xmlEscape(username)}</d:displayname>`;
 
   let inner = xmlResponse(homeHref(username), homeProps);
-  if (depth === 1) inner += xmlResponse(calendarHref(username), calendarCollectionProps());
+  if (depth === 1) inner += xmlResponse(calendarHref(username), calendarCollectionProps(userId));
   sendMultiStatus(res, inner);
 });
 
 router.propfind(['/dav/calendars/:username/default', '/dav/calendars/:username/default/'], (req, res) => {
   if (!requireOwnUser(req, res)) return;
-  const { username } = req.davUser;
+  const { username, id: userId } = req.davUser;
   const depth = req.headers.depth === '1' ? 1 : 0;
 
-  let inner = xmlResponse(calendarHref(username), calendarCollectionProps());
+  let inner = xmlResponse(calendarHref(username), calendarCollectionProps(userId));
   if (depth === 1) {
-    for (const meta of statements.listEventsMeta.all()) {
+    for (const meta of statements.listEventsMeta.all(userId)) {
       inner += xmlResponse(resourceHref(username, meta.uid), eventResourceProps(meta));
     }
   }
@@ -139,26 +139,26 @@ router.propfind(['/dav/calendars/:username/default', '/dav/calendars/:username/d
 
 router.report(['/dav/calendars/:username/default', '/dav/calendars/:username/default/'], (req, res) => {
   if (!requireOwnUser(req, res)) return;
-  const { username } = req.davUser;
+  const { username, id: userId } = req.davUser;
   const $ = cheerio.load(req.body || '', { xmlMode: true });
 
   if (elementsByLocalName($, 'sync-collection').length) {
     const tokenEl = elementsByLocalName($, 'sync-token')[0];
     const sinceSeq = tokenEl ? parseSyncToken($(tokenEl).text()) : 0;
 
-    const changed = statements.listEventsMetaSince.all({ seq: sinceSeq });
-    const removed = statements.listEventTombstonesSince.all({ seq: sinceSeq });
+    const changed = statements.listEventsMetaSince.all({ userId, seq: sinceSeq });
+    const removed = statements.listEventTombstonesSince.all({ userId, seq: sinceSeq });
 
     let inner = '';
     for (const meta of changed) {
-      const event = statements.getEventFullByUid.get(meta.uid);
+      const event = statements.getEventFullByUid.get(meta.uid, userId);
       if (event) inner += icsDataResponse(username, event);
     }
     for (const tomb of removed) {
       inner += xmlResponse(resourceHref(username, tomb.uid), '', 'HTTP/1.1 404 Not Found');
     }
 
-    const newToken = `<d:sync-token>${xmlEscape(syncTokenValue(currentEventsSeq()))}</d:sync-token>`;
+    const newToken = `<d:sync-token>${xmlEscape(syncTokenValue(currentEventsSeq(userId)))}</d:sync-token>`;
     return sendMultiStatus(res, inner, newToken);
   }
 
@@ -167,7 +167,7 @@ router.report(['/dav/calendars/:username/default', '/dav/calendars/:username/def
     let inner = '';
     for (const href of hrefs) {
       const uid = fileToUid(href.split('/').pop() || '');
-      const event = uid && statements.getEventFullByUid.get(uid);
+      const event = uid && statements.getEventFullByUid.get(uid, userId);
       inner += event ? icsDataResponse(username, event) : xmlResponse(href, '', 'HTTP/1.1 404 Not Found');
     }
     return sendMultiStatus(res, inner);
@@ -178,8 +178,8 @@ router.report(['/dav/calendars/:username/default', '/dav/calendars/:username/def
   // full time-range/filter-matching semantics — same precedent as CardDAV's
   // addressbook-query.
   let inner = '';
-  for (const meta of statements.listEventsMeta.all()) {
-    const event = statements.getEventFullByUid.get(meta.uid);
+  for (const meta of statements.listEventsMeta.all(userId)) {
+    const event = statements.getEventFullByUid.get(meta.uid, userId);
     if (event) inner += icsDataResponse(username, event);
   }
   sendMultiStatus(res, inner);
@@ -190,7 +190,7 @@ router.report(['/dav/calendars/:username/default', '/dav/calendars/:username/def
 router.get('/dav/calendars/:username/default/:file', (req, res) => {
   if (!requireOwnUser(req, res)) return;
   const uid = fileToUid(req.params.file);
-  const event = uid && statements.getEventFullByUid.get(uid);
+  const event = uid && statements.getEventFullByUid.get(uid, req.davUser.id);
   if (!event) return res.status(404).end();
 
   res.setHeader('ETag', `"${event.seq}"`);
@@ -202,11 +202,12 @@ router.put('/dav/calendars/:username/default/:file', (req, res) => {
   const uid = fileToUid(req.params.file);
   if (!uid) return res.status(400).end();
 
-  const existedBefore = Boolean(statements.getEventByUidId.get(uid));
+  const userId = req.davUser.id;
+  const existedBefore = Boolean(statements.getEventByUidId.get(uid, userId));
   const parsed = parseICS(req.body || '');
   if (!parsed.title || !parsed.startAt) return res.status(400).end();
 
-  const { seq } = upsertEventFromICal({
+  const { seq } = upsertEventFromICal(userId, {
     uid,
     title: parsed.title,
     description: parsed.description || '',
@@ -224,10 +225,10 @@ router.put('/dav/calendars/:username/default/:file', (req, res) => {
 router.delete('/dav/calendars/:username/default/:file', (req, res) => {
   if (!requireOwnUser(req, res)) return;
   const uid = fileToUid(req.params.file);
-  const existing = uid && statements.getEventByUidId.get(uid);
+  const existing = uid && statements.getEventByUidId.get(uid, req.davUser.id);
   if (!existing) return res.status(404).end();
 
-  deleteEventById(existing.id);
+  deleteEventById(req.davUser.id, existing.id);
   res.status(204).end();
 });
 

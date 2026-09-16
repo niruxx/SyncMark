@@ -4,4 +4,5 @@ data/*.sqlite3-journal
 data/*.sqlite3-wal
 data/*.sqlite3-shm
 data/backups/
+data/admin.json
 npm-debug.log*

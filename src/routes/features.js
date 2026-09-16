@@ -11,13 +11,13 @@ router.get('/features', (req, res) => {
 // server.js) — Settings shows every library's stats regardless of which
 // tabs are currently enabled.
 router.get('/stats', (req, res) => {
-  const { count } = statements.countBookmarks.get();
-  const { count: contactCount } = statements.countContacts.get();
-  const { count: eventCount } = statements.countEvents.get();
-  const { count: passwordCount } = statements.countPasswords.get();
+  const { count } = statements.countBookmarks.get(req.user.id);
+  const { count: contactCount } = statements.countContacts.get(req.user.id);
+  const { count: eventCount } = statements.countEvents.get(req.user.id);
+  const { count: passwordCount } = statements.countPasswords.get(req.user.id);
   res.json({
     total: count,
-    folderCount: listMergedFolders().length,
+    folderCount: listMergedFolders(req.user.id).length,
     contactTotal: contactCount,
     eventTotal: eventCount,
     passwordTotal: passwordCount,

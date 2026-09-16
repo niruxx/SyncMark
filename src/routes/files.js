@@ -8,8 +8,8 @@ const { resolveSafePath, sanitizeName } = require('../utils/fsPath');
 
 const router = express.Router();
 
-function getLocationOrNull(id) {
-  return id ? statements.getFileLocation.get(id) : null;
+function getLocationOrNull(id, userId) {
+  return id ? statements.getFileLocation.get(id, userId) : null;
 }
 
 function validateLocationPath(p) {
@@ -118,7 +118,7 @@ router.get('/files/browse-server', (req, res) => {
 });
 
 router.get('/files/locations', (req, res) => {
-  res.json(statements.listFileLocations.all());
+  res.json(statements.listFileLocations.all(req.user.id));
 });
 
 router.post('/files/locations', (req, res) => {
@@ -130,8 +130,8 @@ router.post('/files/locations', (req, res) => {
   if (error) return res.status(400).json({ error });
 
   try {
-    const result = statements.insertFileLocation.run({ name, path: locPath });
-    res.status(201).json(statements.getFileLocation.get(result.lastInsertRowid));
+    const result = statements.insertFileLocation.run({ userId: req.user.id, name, path: locPath });
+    res.status(201).json(statements.getFileLocation.get(result.lastInsertRowid, req.user.id));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return res.status(409).json({ error: 'A location with that name already exists' });
     throw err;
@@ -139,7 +139,7 @@ router.post('/files/locations', (req, res) => {
 });
 
 router.put('/files/locations/:id', (req, res) => {
-  const existing = statements.getFileLocation.get(req.params.id);
+  const existing = statements.getFileLocation.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Location not found' });
 
   const name = (req.body.name ?? existing.name).trim();
@@ -150,8 +150,8 @@ router.put('/files/locations/:id', (req, res) => {
   if (error) return res.status(400).json({ error });
 
   try {
-    statements.updateFileLocation.run({ id: existing.id, name, path: locPath });
-    res.json(statements.getFileLocation.get(existing.id));
+    statements.updateFileLocation.run({ id: existing.id, userId: req.user.id, name, path: locPath });
+    res.json(statements.getFileLocation.get(existing.id, req.user.id));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return res.status(409).json({ error: 'A location with that name already exists' });
     throw err;
@@ -160,16 +160,16 @@ router.put('/files/locations/:id', (req, res) => {
 
 // Only un-registers the location — never touches anything on disk.
 router.delete('/files/locations/:id', (req, res) => {
-  const existing = statements.getFileLocation.get(req.params.id);
+  const existing = statements.getFileLocation.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Location not found' });
-  statements.deleteFileLocation.run(existing.id);
+  statements.deleteFileLocation.run(existing.id, req.user.id);
   res.status(204).end();
 });
 
 // ---------- browsing ----------
 
 router.get('/files/browse', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let dir;
@@ -214,7 +214,7 @@ router.get('/files/browse', (req, res) => {
 });
 
 router.get('/files/download', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let target;
@@ -249,7 +249,7 @@ const VIEWABLE_MIME = {
 };
 
 router.get('/files/view', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let target;
@@ -280,7 +280,7 @@ router.get('/files/view', (req, res) => {
 const TEXT_MAX_BYTES = 5 * 1024 * 1024;
 
 router.get('/files/text', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let target;
@@ -310,7 +310,7 @@ router.get('/files/text', (req, res) => {
 // "scope the parser, don't touch the global default" precedent
 // carddav.js/caldav.js already set for their own body parsing.
 router.put('/files/text', express.text({ type: 'text/plain', limit: '6mb' }), (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let target;
@@ -344,7 +344,7 @@ router.put('/files/text', express.text({ type: 'text/plain', limit: '6mb' }), (r
 // pretending Windows has real owner/group/other bits.
 
 router.get('/files/permissions', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let target;
@@ -364,7 +364,7 @@ router.get('/files/permissions', (req, res) => {
 });
 
 router.put('/files/permissions', (req, res) => {
-  const location = getLocationOrNull(req.body.location);
+  const location = getLocationOrNull(req.body.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let target;
@@ -398,7 +398,7 @@ const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
       try {
-        const location = getLocationOrNull(req.query.location);
+        const location = getLocationOrNull(req.query.location, req.user.id);
         if (!location) return cb(new Error('Location not found'));
         const dir = resolveSafePath(location.path, req.query.path || '.');
         if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
@@ -411,7 +411,7 @@ const upload = multer({
     },
     filename: (req, file, cb) => {
       try {
-        const location = getLocationOrNull(req.query.location);
+        const location = getLocationOrNull(req.query.location, req.user.id);
         const dir = resolveSafePath(location.path, req.query.path || '.');
         const name = sanitizeName(file.originalname);
         if (!name) return cb(new Error('Invalid filename'));
@@ -441,7 +441,7 @@ router.post('/files/upload', (req, res) => {
 // ---------- mkdir / rename / delete ----------
 
 router.post('/files/mkdir', (req, res) => {
-  const location = getLocationOrNull(req.body.location);
+  const location = getLocationOrNull(req.body.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   const name = sanitizeName(req.body.name);
@@ -468,7 +468,7 @@ router.post('/files/mkdir', (req, res) => {
 });
 
 router.put('/files/rename', (req, res) => {
-  const location = getLocationOrNull(req.body.location);
+  const location = getLocationOrNull(req.body.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   const newName = sanitizeName(req.body.newName);
@@ -500,7 +500,7 @@ router.put('/files/rename', (req, res) => {
 // Moves to .trash rather than permanently deleting — see the trash section
 // above. Permanent removal only happens via the trash routes below.
 router.delete('/files/item', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   let target;
@@ -535,13 +535,13 @@ router.delete('/files/item', (req, res) => {
 // ---------- trash management ----------
 
 router.get('/files/trash', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
   res.json(readTrashEntries(location));
 });
 
 router.post('/files/trash/:id/restore', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
   if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'Invalid trash item id' });
 
@@ -575,7 +575,7 @@ router.post('/files/trash/:id/restore', (req, res) => {
 });
 
 router.delete('/files/trash/:id', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
   if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'Invalid trash item id' });
 
@@ -591,7 +591,7 @@ router.delete('/files/trash/:id', (req, res) => {
 });
 
 router.delete('/files/trash', (req, res) => {
-  const location = getLocationOrNull(req.query.location);
+  const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
   try {

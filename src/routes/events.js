@@ -47,11 +47,11 @@ function isValidIso(value) {
 
 router.get('/events', (req, res) => {
   const q = (req.query.q || '').trim();
-  res.json(statements.listEvents.all({ q, qLike: `%${q}%` }));
+  res.json(statements.listEvents.all({ userId: req.user.id, q, qLike: `%${q}%` }));
 });
 
 router.get('/events/export', (req, res) => {
-  const rows = statements.listEventsMeta.all().map((m) => statements.getEventFullByUid.get(m.uid));
+  const rows = statements.listEventsMeta.all(req.user.id).map((m) => statements.getEventFullByUid.get(m.uid, req.user.id));
   const ics = rows.map((event) => buildICS(event)).join('');
   res.setHeader('Content-Disposition', 'attachment; filename="syncmark-calendar.ics"');
   res.type('text/calendar').send(ics);
@@ -80,12 +80,12 @@ router.post('/events/import', upload.single('file'), (req, res) => {
 
   if (fieldsList.length === 0) return res.status(422).json({ error: 'No events found in the uploaded file' });
 
-  const imported = insertManyEvents(fieldsList);
+  const imported = insertManyEvents(req.user.id, fieldsList);
   res.json({ imported });
 });
 
 router.get('/events/:id', (req, res) => {
-  const row = statements.getEvent.get(req.params.id);
+  const row = statements.getEvent.get(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'Event not found' });
   res.json(row);
 });
@@ -98,12 +98,12 @@ router.post('/events', (req, res) => {
   }
 
   const uid = crypto.randomUUID();
-  const id = createEvent({ uid, ...fields });
-  res.status(201).json(statements.getEvent.get(id));
+  const id = createEvent(req.user.id, { uid, ...fields });
+  res.status(201).json(statements.getEvent.get(id, req.user.id));
 });
 
 router.put('/events/:id', (req, res) => {
-  const existing = statements.getEvent.get(req.params.id);
+  const existing = statements.getEvent.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Event not found' });
 
   const fields = eventFieldsFromBody(req.body, existing);
@@ -112,20 +112,20 @@ router.put('/events/:id', (req, res) => {
     return res.status(400).json({ error: 'A valid start and end time are required' });
   }
 
-  updateEventFields(existing.id, fields);
-  res.json(statements.getEvent.get(existing.id));
+  updateEventFields(req.user.id, existing.id, fields);
+  res.json(statements.getEvent.get(existing.id, req.user.id));
 });
 
 router.delete('/events/all', (req, res) => {
-  statements.deleteAllEvents.run();
+  statements.deleteAllEvents.run(req.user.id);
   res.status(204).end();
 });
 
 router.delete('/events/:id', (req, res) => {
-  const existing = statements.getEvent.get(req.params.id);
+  const existing = statements.getEvent.get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Event not found' });
 
-  deleteEventById(existing.id);
+  deleteEventById(req.user.id, existing.id);
   res.status(204).end();
 });
 

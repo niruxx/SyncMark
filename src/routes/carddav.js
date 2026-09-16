@@ -68,8 +68,8 @@ function parseSyncToken(token) {
   return m ? parseInt(m[1], 10) : 0;
 }
 
-function addressbookCollectionProps() {
-  const seq = currentContactsSeq();
+function addressbookCollectionProps(userId) {
+  const seq = currentContactsSeq(userId);
   return (
     '<d:resourcetype><d:collection/><card:addressbook/></d:resourcetype>' +
     '<d:displayname>SyncMark Contacts</d:displayname>' +
@@ -157,23 +157,23 @@ router.propfind(['/dav/principals/:username', '/dav/principals/:username/'], (re
 
 router.propfind(['/dav/addressbooks/:username', '/dav/addressbooks/:username/'], (req, res) => {
   if (!requireOwnUser(req, res)) return;
-  const { username } = req.davUser;
+  const { username, id: userId } = req.davUser;
   const depth = req.headers.depth === '1' ? 1 : 0;
   const homeProps = `<d:resourcetype><d:collection/></d:resourcetype><d:displayname>${xmlEscape(username)}</d:displayname>`;
 
   let inner = xmlResponse(homeHref(username), homeProps);
-  if (depth === 1) inner += xmlResponse(addressbookHref(username), addressbookCollectionProps());
+  if (depth === 1) inner += xmlResponse(addressbookHref(username), addressbookCollectionProps(userId));
   sendMultiStatus(res, inner);
 });
 
 router.propfind(['/dav/addressbooks/:username/default', '/dav/addressbooks/:username/default/'], (req, res) => {
   if (!requireOwnUser(req, res)) return;
-  const { username } = req.davUser;
+  const { username, id: userId } = req.davUser;
   const depth = req.headers.depth === '1' ? 1 : 0;
 
-  let inner = xmlResponse(addressbookHref(username), addressbookCollectionProps());
+  let inner = xmlResponse(addressbookHref(username), addressbookCollectionProps(userId));
   if (depth === 1) {
-    for (const meta of statements.listContactsMeta.all()) {
+    for (const meta of statements.listContactsMeta.all(userId)) {
       inner += xmlResponse(resourceHref(username, meta.uid), vcardResourceProps(meta));
     }
   }
@@ -186,26 +186,26 @@ router.report(
   ['/dav/addressbooks/:username/default', '/dav/addressbooks/:username/default/'],
   (req, res) => {
     if (!requireOwnUser(req, res)) return;
-    const { username } = req.davUser;
+    const { username, id: userId } = req.davUser;
     const $ = cheerio.load(req.body || '', { xmlMode: true });
 
     if (elementsByLocalName($, 'sync-collection').length) {
       const tokenEl = elementsByLocalName($, 'sync-token')[0];
       const sinceSeq = tokenEl ? parseSyncToken($(tokenEl).text()) : 0;
 
-      const changed = statements.listContactsMetaSince.all({ seq: sinceSeq });
-      const removed = statements.listTombstonesSince.all({ seq: sinceSeq });
+      const changed = statements.listContactsMetaSince.all({ userId, seq: sinceSeq });
+      const removed = statements.listTombstonesSince.all({ userId, seq: sinceSeq });
 
       let inner = '';
       for (const meta of changed) {
-        const contact = statements.getContactFullByUid.get(meta.uid);
+        const contact = statements.getContactFullByUid.get(meta.uid, userId);
         if (contact) inner += vcardDataResponse(username, contact);
       }
       for (const tomb of removed) {
         inner += xmlResponse(resourceHref(username, tomb.uid), '', 'HTTP/1.1 404 Not Found');
       }
 
-      const newToken = `<d:sync-token>${xmlEscape(syncTokenValue(currentContactsSeq()))}</d:sync-token>`;
+      const newToken = `<d:sync-token>${xmlEscape(syncTokenValue(currentContactsSeq(userId)))}</d:sync-token>`;
       return sendMultiStatus(res, inner, newToken);
     }
 
@@ -214,7 +214,7 @@ router.report(
       let inner = '';
       for (const href of hrefs) {
         const uid = fileToUid(href.split('/').pop() || '');
-        const contact = uid && statements.getContactFullByUid.get(uid);
+        const contact = uid && statements.getContactFullByUid.get(uid, userId);
         inner += contact ? vcardDataResponse(username, contact) : xmlResponse(href, '', 'HTTP/1.1 404 Not Found');
       }
       return sendMultiStatus(res, inner);
@@ -224,8 +224,8 @@ router.report(
     // book is small enough that we just return everything rather than
     // implementing full filter-matching semantics.
     let inner = '';
-    for (const meta of statements.listContactsMeta.all()) {
-      const contact = statements.getContactFullByUid.get(meta.uid);
+    for (const meta of statements.listContactsMeta.all(userId)) {
+      const contact = statements.getContactFullByUid.get(meta.uid, userId);
       if (contact) inner += vcardDataResponse(username, contact);
     }
     sendMultiStatus(res, inner);
@@ -237,7 +237,7 @@ router.report(
 router.get('/dav/addressbooks/:username/default/:file', (req, res) => {
   if (!requireOwnUser(req, res)) return;
   const uid = fileToUid(req.params.file);
-  const contact = uid && statements.getContactFullByUid.get(uid);
+  const contact = uid && statements.getContactFullByUid.get(uid, req.davUser.id);
   if (!contact) return res.status(404).end();
 
   res.setHeader('ETag', `"${contact.seq}"`);
@@ -249,11 +249,12 @@ router.put('/dav/addressbooks/:username/default/:file', (req, res) => {
   const uid = fileToUid(req.params.file);
   if (!uid) return res.status(400).end();
 
-  const existedBefore = Boolean(statements.getContactByUidId.get(uid));
+  const userId = req.davUser.id;
+  const existedBefore = Boolean(statements.getContactByUidId.get(uid, userId));
   const parsed = parseVCard(req.body || '');
   const fullName = parsed.fullName || [parsed.firstName, parsed.lastName].filter(Boolean).join(' ') || uid;
 
-  const { seq } = upsertContactFromVCard({
+  const { seq } = upsertContactFromVCard(userId, {
     uid,
     fullName,
     firstName: parsed.firstName || '',
@@ -273,10 +274,10 @@ router.put('/dav/addressbooks/:username/default/:file', (req, res) => {
 router.delete('/dav/addressbooks/:username/default/:file', (req, res) => {
   if (!requireOwnUser(req, res)) return;
   const uid = fileToUid(req.params.file);
-  const existing = uid && statements.getContactByUidId.get(uid);
+  const existing = uid && statements.getContactByUidId.get(uid, req.davUser.id);
   if (!existing) return res.status(404).end();
 
-  deleteContactById(existing.id);
+  deleteContactById(req.davUser.id, existing.id);
   res.status(204).end();
 });
 

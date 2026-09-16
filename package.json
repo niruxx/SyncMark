@@ -1,6 +1,6 @@
 {
   "name": "syncmark",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Self-hosted bookmark manager server: import browser bookmark exports (HTML/JSON) and browse, edit, and remove them from the web.",
   "main": "server.js",
   "scripts": {

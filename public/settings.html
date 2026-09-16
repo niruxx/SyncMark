@@ -65,7 +65,6 @@
           <button type="button" class="settings-tab" data-tab="passwords" role="tab" aria-selected="false">Passwords</button>
           <button type="button" class="settings-tab" data-tab="contacts" role="tab" aria-selected="false">Contacts</button>
           <button type="button" class="settings-tab" data-tab="calendar" role="tab" aria-selected="false">Calendar</button>
-          <button type="button" class="settings-tab" data-tab="backup" role="tab" aria-selected="false">Backup</button>
         </div>
         <p class="empty-state" id="settings-search-empty" hidden>No settings found for that search.</p>
 
@@ -120,6 +119,10 @@
             <p class="modal-error" id="password-error" hidden></p>
             <button type="submit" class="button">Save password</button>
           </form>
+          <div class="danger-bar">
+            <span class="material-symbols-outlined">warning</span>
+            Once saved, you'll need this new password to sign in — make sure you'll remember it.
+          </div>
         </section>
         </div>
 
@@ -218,6 +221,31 @@
               <option value="dark">Dark</option>
               <option value="light">Light</option>
             </select>
+          </div>
+          <div>
+            <span class="contact-field-label">Color scheme</span>
+            <div class="scheme-picker" id="settings-scheme-picker">
+              <button type="button" class="scheme-swatch" data-scheme="blue" aria-pressed="false">
+                <span class="scheme-swatch-dot" style="background:#0b57d0"></span>
+                Blue
+              </button>
+              <button type="button" class="scheme-swatch" data-scheme="green" aria-pressed="false">
+                <span class="scheme-swatch-dot" style="background:#146c2e"></span>
+                Green
+              </button>
+              <button type="button" class="scheme-swatch" data-scheme="purple" aria-pressed="false">
+                <span class="scheme-swatch-dot" style="background:#6750a4"></span>
+                Purple
+              </button>
+              <button type="button" class="scheme-swatch" data-scheme="orange" aria-pressed="false">
+                <span class="scheme-swatch-dot" style="background:#8b5000"></span>
+                Orange
+              </button>
+              <button type="button" class="scheme-swatch" data-scheme="rose" aria-pressed="false">
+                <span class="scheme-swatch-dot" style="background:#984061"></span>
+                Rose
+              </button>
+            </div>
           </div>
           <div class="settings-row">
             <label for="default-view-select">Default view</label>
@@ -451,69 +479,15 @@
         </section>
         </div>
 
-        <div class="settings-tab-panel" data-tab-panel="backup" hidden>
-        <section class="settings-section">
-          <h2>Automatic backups</h2>
-          <p class="settings-hint">
-            A backup is a snapshot of this SyncMark instance — including the actual files under any File Manager
-            locations, not just their configured paths. That means backup size and speed scale with however much
-            you keep there. Point the directory below at a synced cloud folder (rclone, Dropbox, OneDrive, a
-            network share) to get real off-machine copies; left blank, backups are kept in
-            <code>data/backups</code> on this server.
-          </p>
-          <button type="button" class="feature-toggle-btn" id="backup-enabled-toggle" aria-pressed="false">Back up automatically</button>
-          <div class="settings-row">
-            <label for="backup-frequency-select">Frequency</label>
-            <select id="backup-frequency-select">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </select>
-          </div>
-          <div class="settings-row">
-            <label for="backup-retention-input">Keep this many backups</label>
-            <input type="number" id="backup-retention-input" min="1" max="100" style="max-width: 100px" />
-          </div>
-          <div class="settings-row">
-            <label for="backup-dir-input">Backup directory (optional)</label>
-            <input type="text" id="backup-dir-input" placeholder="Default: data/backups" />
-          </div>
-          <div>
-            <span class="contact-field-label">What to back up</span>
-            <p class="settings-hint">Applies to both automatic backups and "Back up now" below.</p>
-            <div class="feature-toggle-group" id="backup-modules-group">
-              <button type="button" class="feature-toggle-btn" data-module="bookmarks" aria-pressed="false">Bookmarks</button>
-              <button type="button" class="feature-toggle-btn" data-module="contacts" aria-pressed="false">Contacts</button>
-              <button type="button" class="feature-toggle-btn" data-module="calendar" aria-pressed="false">Calendar</button>
-              <button type="button" class="feature-toggle-btn" data-module="files" aria-pressed="false">Files</button>
-              <button type="button" class="feature-toggle-btn" data-module="passwords" aria-pressed="false">Passwords</button>
-              <button type="button" class="feature-toggle-btn" data-module="account" aria-pressed="false">Account &amp; settings</button>
-            </div>
-          </div>
-          <p class="modal-error" id="backup-schedule-error" hidden></p>
-          <div class="settings-row">
-            <div>
-              <p class="settings-hint">Create a backup right now, using the settings above.</p>
-            </div>
-            <button type="button" id="backup-run-now-btn" class="secondary">Back up now</button>
-          </div>
-        </section>
-
-        <section class="settings-section">
-          <h2>Restore points</h2>
-          <ul class="folders-manage-list" id="backups-list"></ul>
-          <p class="folders-manage-empty" id="backups-empty-hint" hidden>No backups yet.</p>
-        </section>
-        </div>
-
         <p class="settings-signature">- niruxxdaboi -</p>
-        <p class="settings-version">Version 1.1.0</p>
+        <p class="settings-version">Version 1.2.0</p>
       </main>
     </div>
 
     <div class="modal-backdrop" id="delete-account-modal">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-account-heading">
         <h2 id="delete-account-heading">Delete account</h2>
-        <p class="settings-hint">This permanently deletes your account and all bookmarks, folders, and settings. There is no undo. Enter your password to confirm.</p>
+        <p class="settings-hint">This permanently deletes your account and everything in it — bookmarks, contacts, events, passwords, and file locations. Enter your password to confirm.</p>
         <form id="delete-account-form">
           <label>
             Password
@@ -523,6 +497,10 @@
           <div class="modal-actions">
             <button type="button" id="delete-account-cancel" class="secondary">Cancel</button>
             <button type="submit" id="delete-account-confirm" class="danger">Delete everything</button>
+          </div>
+          <div class="danger-bar">
+            <span class="material-symbols-outlined">warning</span>
+            This is permanent — your account and everything in it will be gone for good.
           </div>
         </form>
       </div>
@@ -542,29 +520,6 @@
           <button type="button" id="browse-server-cancel-btn" class="secondary">Cancel</button>
           <button type="button" id="browse-server-select-btn">Select this folder</button>
         </div>
-      </div>
-    </div>
-
-    <div class="modal-backdrop" id="restore-backup-modal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restore-backup-heading">
-        <h2 id="restore-backup-heading">Restore backup</h2>
-        <p class="settings-hint" id="restore-backup-subtitle">This replaces everything currently in SyncMark with the contents of this backup. There is no undo. Enter your password to confirm.</p>
-        <p class="settings-hint">Files under File Manager locations are added and overwritten from the backup, never deleted — so restoring is safe even if a location has changed since the backup was made.</p>
-        <div>
-          <span class="contact-field-label">What to restore</span>
-          <div class="feature-toggle-group" id="restore-modules-group"></div>
-        </div>
-        <form id="restore-backup-form">
-          <label>
-            Password
-            <input type="password" id="restore-backup-password" required autocomplete="current-password" />
-          </label>
-          <p class="modal-error" id="restore-backup-error" hidden></p>
-          <div class="modal-actions">
-            <button type="button" id="restore-backup-cancel" class="secondary">Cancel</button>
-            <button type="submit" id="restore-backup-confirm" class="danger">Restore</button>
-          </div>
-        </form>
       </div>
     </div>
   </div>

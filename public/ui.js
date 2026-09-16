@@ -243,12 +243,18 @@
         <button type="button" class="secondary confirm-cancel">Cancel</button>
         <button type="button" class="confirm-ok">Confirm</button>
       </div>
+      <div class="danger-bar" hidden>
+        <span class="material-symbols-outlined">warning</span>
+        <span class="confirm-danger-text"></span>
+      </div>
     </div>`;
   document.body.appendChild(backdrop);
 
   const messageEl = backdrop.querySelector('.confirm-message');
   const okBtn = backdrop.querySelector('.confirm-ok');
   const cancelBtn = backdrop.querySelector('.confirm-cancel');
+  const dangerBar = backdrop.querySelector('.danger-bar');
+  const dangerBarText = backdrop.querySelector('.confirm-danger-text');
   let resolveFn = null;
 
   function close(result) {
@@ -268,9 +274,20 @@
     if (e.key === 'Escape' && backdrop.classList.contains('is-open')) close(false);
   });
 
-  window.confirmDialog = function confirmDialog(message, { danger = false } = {}) {
+  // `irreversible` adds the same red bottom-bar warning strip used in the
+  // app's other high-stakes dialogs (delete account, reset instance) —
+  // pass a string to customize the wording, or `true` for the generic one,
+  // for actions like deleting a user or another genuinely un-undoable
+  // confirm that goes through this shared dialog rather than a bespoke one.
+  window.confirmDialog = function confirmDialog(message, { danger = false, irreversible = false } = {}) {
     messageEl.textContent = message;
     okBtn.className = danger ? 'danger confirm-ok' : 'confirm-ok';
+    if (irreversible) {
+      dangerBarText.textContent = typeof irreversible === 'string' ? irreversible : 'This action is permanent and cannot be undone.';
+      dangerBar.hidden = false;
+    } else {
+      dangerBar.hidden = true;
+    }
     backdrop.classList.add('is-open');
     okBtn.focus();
     return new Promise((resolve) => {

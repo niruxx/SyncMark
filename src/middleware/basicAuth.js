@@ -15,7 +15,7 @@ function basicAuth(req, res, next) {
   const username = decoded.slice(0, sepIndex);
   const password = decoded.slice(sepIndex + 1);
   const user = statements.getUserByUsername.get(username);
-  if (!user || !verifyPassword(password, user.password_hash)) {
+  if (!user || !verifyPassword(password, user.password_hash) || !user.enabled) {
     return unauthorized(res);
   }
 

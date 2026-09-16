@@ -11,11 +11,13 @@ const filesRouter = require('./src/routes/files');
 const passwordsRouter = require('./src/routes/passwords');
 const featuresRouter = require('./src/routes/features');
 const backupsRouter = require('./src/routes/backups');
+const adminRouter = require('./src/routes/admin');
 const carddavRouter = require('./src/routes/carddav');
 const caldavRouter = require('./src/routes/caldav');
-const { requireAuth } = require('./src/middleware/auth');
+const { requireAuth, gateAdmin } = require('./src/middleware/auth');
 const { gateRouter } = require('./src/middleware/featureGate');
 const { startScheduler } = require('./src/backup');
+const { ensureAdminFromConfig } = require('./src/adminConfig');
 const { PORT } = require('./src/config');
 
 const app = express();
@@ -31,7 +33,6 @@ app.use(caldavRouter);
 app.use(express.json());
 app.use('/api', authRouter);
 app.use('/api', requireAuth, featuresRouter);
-app.use('/api', requireAuth, backupsRouter);
 app.use('/api', requireAuth, gateRouter('bookmarks', bookmarksRouter));
 app.use('/api', requireAuth, gateRouter('bookmarks', importRouter));
 app.use('/api', requireAuth, gateRouter('bookmarks', foldersRouter));
@@ -39,12 +40,16 @@ app.use('/api', requireAuth, gateRouter('contacts', contactsRouter));
 app.use('/api', requireAuth, gateRouter('calendar', eventsRouter));
 app.use('/api', requireAuth, gateRouter('files', filesRouter));
 app.use('/api', requireAuth, gateRouter('passwords', passwordsRouter));
+app.use('/api', requireAuth, gateAdmin(backupsRouter));
+app.use('/api', requireAuth, gateAdmin(adminRouter));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
+
+ensureAdminFromConfig();
 
 app.listen(PORT, () => {
   console.log(`SyncMark running at http://localhost:${PORT}`);

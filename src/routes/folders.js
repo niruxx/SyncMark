@@ -4,21 +4,21 @@ const { normalizeFolderPath } = require('../utils/folderPath');
 
 const router = express.Router();
 
-function folderExists(name) {
-  const inBookmarks = statements.listFolders.all().some((row) => row.folder === name);
+function folderExists(userId, name) {
+  const inBookmarks = statements.listFolders.all(userId).some((row) => row.folder === name);
   if (inBookmarks) return true;
-  return statements.listFolderNames.all().some((row) => row.name === name);
+  return statements.listFolderNames.all(userId).some((row) => row.name === name);
 }
 
 router.get('/folders', (req, res) => {
-  res.json(listMergedFolders());
+  res.json(listMergedFolders(req.user.id));
 });
 
 router.post('/folders', (req, res) => {
   const name = normalizeFolderPath(req.body.name);
   if (!name) return res.status(400).json({ error: 'Folder name is required' });
 
-  ensureFolderAncestors(name);
+  ensureFolderAncestors(req.user.id, name);
   res.status(201).json({ folder: name, count: 0 });
 });
 
@@ -32,11 +32,11 @@ router.put('/folders', (req, res) => {
   if (oldName === newName) {
     return res.json({ folder: newName });
   }
-  if (!folderExists(oldName)) {
+  if (!folderExists(req.user.id, oldName)) {
     return res.status(404).json({ error: 'Folder not found' });
   }
 
-  renameFolder(oldName, newName);
+  renameFolder(req.user.id, oldName, newName);
   res.json({ folder: newName });
 });
 
@@ -45,13 +45,13 @@ router.put('/folders', (req, res) => {
 router.put('/folders/reorder', (req, res) => {
   const name = normalizeFolderPath(req.body.name);
   if (!name) return res.status(400).json({ error: 'Folder name is required' });
-  if (!folderExists(name)) return res.status(404).json({ error: 'Folder not found' });
+  if (!folderExists(req.user.id, name)) return res.status(404).json({ error: 'Folder not found' });
 
   const beforeName = req.body.beforeName ? normalizeFolderPath(req.body.beforeName) : null;
   const afterName = req.body.afterName ? normalizeFolderPath(req.body.afterName) : null;
 
-  const before = beforeName ? statements.getFolderByName.get(beforeName) : null;
-  const after = afterName ? statements.getFolderByName.get(afterName) : null;
+  const before = beforeName ? statements.getFolderByName.get(beforeName, req.user.id) : null;
+  const after = afterName ? statements.getFolderByName.get(afterName, req.user.id) : null;
 
   let position;
   if (before && after) {
@@ -64,19 +64,19 @@ router.put('/folders/reorder', (req, res) => {
     position = 0;
   }
 
-  ensureFolderAncestors(name);
-  statements.setFolderPosition.run({ name, position });
+  ensureFolderAncestors(req.user.id, name);
+  statements.setFolderPosition.run({ name, userId: req.user.id, position });
   res.json({ folder: name, position });
 });
 
 router.delete('/folders', (req, res) => {
   const name = normalizeFolderPath(req.body.name);
   if (!name) return res.status(400).json({ error: 'Folder name is required' });
-  if (!folderExists(name)) {
+  if (!folderExists(req.user.id, name)) {
     return res.status(404).json({ error: 'Folder not found' });
   }
 
-  deleteFolder(name);
+  deleteFolder(req.user.id, name);
   res.status(204).end();
 });
 

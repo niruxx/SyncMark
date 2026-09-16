@@ -127,6 +127,76 @@ html.page-leaving {
   --elev-3: 0 4px 8px rgba(0, 0, 0, 0.4), 0 16px 36px rgba(0, 0, 0, 0.55);
 }
 
+/* ---------- Color schemes ----------
+   Only the "primary" hue family (button/link/focus colour) swaps per
+   scheme — every neutral surface/outline token above stays shared, same
+   "one seed colour on a shared neutral base" idea Material You theming
+   uses. "Blue" is the original palette and needs no override block: it's
+   already what :root/[data-theme] define by default when data-scheme is
+   absent or "blue". Star (favorite) and the ambient aurora hues stay
+   constant across schemes on purpose — favorite-yellow and the login
+   backdrop are decorative/semantic, not brand colour. */
+
+[data-scheme='green'][data-theme='light'] {
+  --primary: #146c2e;
+  --on-primary: #ffffff;
+  --primary-container: #a8f5b0;
+  --on-primary-container: #00210a;
+  --primary-hover: rgba(20, 108, 46, 0.08);
+}
+[data-scheme='green'][data-theme='dark'] {
+  --primary: #8ddb94;
+  --on-primary: #00390f;
+  --primary-container: #005321;
+  --on-primary-container: #a8f5b0;
+  --primary-hover: rgba(141, 219, 148, 0.12);
+}
+
+[data-scheme='purple'][data-theme='light'] {
+  --primary: #6750a4;
+  --on-primary: #ffffff;
+  --primary-container: #eaddff;
+  --on-primary-container: #21005d;
+  --primary-hover: rgba(103, 80, 164, 0.08);
+}
+[data-scheme='purple'][data-theme='dark'] {
+  --primary: #d0bcff;
+  --on-primary: #381e72;
+  --primary-container: #4f378b;
+  --on-primary-container: #eaddff;
+  --primary-hover: rgba(208, 188, 255, 0.12);
+}
+
+[data-scheme='orange'][data-theme='light'] {
+  --primary: #8b5000;
+  --on-primary: #ffffff;
+  --primary-container: #ffdcbe;
+  --on-primary-container: #2c1600;
+  --primary-hover: rgba(139, 80, 0, 0.08);
+}
+[data-scheme='orange'][data-theme='dark'] {
+  --primary: #ffb868;
+  --on-primary: #4a2800;
+  --primary-container: #6b3c00;
+  --on-primary-container: #ffdcbe;
+  --primary-hover: rgba(255, 184, 104, 0.12);
+}
+
+[data-scheme='rose'][data-theme='light'] {
+  --primary: #984061;
+  --on-primary: #ffffff;
+  --primary-container: #ffd9e2;
+  --on-primary-container: #3e001d;
+  --primary-hover: rgba(152, 64, 97, 0.08);
+}
+[data-scheme='rose'][data-theme='dark'] {
+  --primary: #ffb0c8;
+  --on-primary: #5e1133;
+  --primary-container: #7a2948;
+  --on-primary-container: #ffd9e2;
+  --primary-hover: rgba(255, 176, 200, 0.12);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -853,7 +923,16 @@ button.danger {
   font-weight: 600;
 }
 
+/* Every sidebar's top-level <ul> (Bookmarks' folders, Contacts' filter/group
+   lists, Files' locations, Passwords' filter list) — none of these are
+   actually bulleted lists, just semantic groupings, but only #folder-list
+   had ever gotten the list-style reset; the rest silently kept the browser's
+   default disc marker. */
 #folder-list,
+#contact-filter-list,
+#group-list,
+#location-list,
+#password-filter-list,
 .folder-children {
   list-style: none;
   padding: 0;
@@ -1456,6 +1535,7 @@ button.danger {
 }
 
 .modal input,
+.modal textarea,
 .account-form input,
 .inline-form input,
 .folders-manage-row input,
@@ -1473,7 +1553,12 @@ button.danger {
   transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
+.modal textarea {
+  resize: vertical;
+}
+
 .modal input:focus,
+.modal textarea:focus,
 .account-form input:focus,
 .inline-form input:focus,
 .folders-manage-row input:focus,
@@ -1487,6 +1572,30 @@ button.danger {
   color: var(--error);
   font-size: 0.8125rem;
   margin: 0 0 0.75rem;
+  /* Same "toggling [hidden] off replays the animation" trick used
+     throughout this file — a validation error appearing gets a brief
+     shake + fade-in instead of just snapping into existence. */
+  animation: errorShakeIn 0.32s var(--ease) both;
+}
+
+@keyframes errorShakeIn {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(-4px);
+  }
+  55% {
+    transform: translateX(3px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 
 .modal-actions {
@@ -1747,6 +1856,187 @@ button.danger {
   color: var(--on-surface-variant);
 }
 
+/* ---------- First-run setup: admin account / color scheme / theme steps ---------- */
+
+.auth-section-heading {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--outline-variant);
+  color: var(--on-surface);
+  font-weight: 600;
+}
+
+/* .auth-card centers everything by default (headings/subtitle included,
+   consistent with the rest of the card) — but a wrapping multi-line
+   paragraph reads worse centered than left-aligned, unlike a short heading. */
+#admin-account-section .settings-hint {
+  text-align: left;
+}
+
+.scheme-picker,
+.theme-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.scheme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--corner-lg);
+  border: 1px solid var(--outline-variant);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  flex: 1 1 5.5rem;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.scheme-swatch:hover {
+  background: var(--surface-container);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.scheme-swatch.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.scheme-swatch-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  border-radius: var(--corner-lg);
+  border: 1px solid var(--outline-variant);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  flex: 1 1 8rem;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.theme-option:hover {
+  background: var(--surface-container);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.theme-option.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+/* Setup-wizard step transitions — "Continue"/"Back" slides the new step in
+   from the direction it conceptually arrived from, rather than just
+   snapping between four unrelated screens. Applied by auth.js right when
+   [hidden] comes off, same replay-on-remount trick every other
+   [hidden]-toggled entrance animation in this file already uses. */
+@keyframes stepEnterForward {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes stepEnterBack {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.step-enter-forward {
+  animation: stepEnterForward 0.32s var(--ease-out-soft) both;
+}
+
+.step-enter-back {
+  animation: stepEnterBack 0.32s var(--ease-out-soft) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-enter-forward,
+  .step-enter-back,
+  .modal-error {
+    animation: none;
+  }
+}
+
+/* ---------- Danger bar ----------
+   A persistent (not dismissable, not a toast) red strip for a section or
+   dialog whose action is irreversible or otherwise high-stakes — password
+   resets, admin-account creation, account/user deletion. Deliberately
+   heavier than .modal-error (a validation message) or a plain danger
+   button: this warns about the *consequence* of a control elsewhere on the
+   same screen, not a problem with what was just typed. */
+.danger-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem 1.25rem;
+  margin-top: 1.25rem;
+  background: var(--error);
+  color: var(--on-error);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.5;
+  border-radius: var(--corner-md);
+  animation: revealDown 0.24s var(--ease) both;
+}
+
+.danger-bar .material-symbols-outlined {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+/* Inside a modal or settings card, bleed it flush to the container's own
+   edges/corners instead of floating as an inset card, so it reads as a
+   warning strip anchored to the bottom of that dialog/section rather than
+   just another paragraph of text. */
+.modal .danger-bar {
+  margin: 1.25rem -1.75rem -1.75rem;
+  border-radius: 0 0 var(--corner-xl) var(--corner-xl);
+}
+
+.settings-section .danger-bar {
+  margin: 1.25rem -2rem -1.75rem;
+  border-radius: 0 0 var(--corner-lg) var(--corner-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .danger-bar {
+    animation: none;
+  }
+}
+
 /* ---------- Toasts (Material snackbars) ---------- */
 
 .toast-container {
@@ -1806,7 +2096,16 @@ button.danger {
 }
 
 .settings-tab {
-  flex: 1;
+  transition: background-color 0.18s var(--ease), color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+  /* flex-basis: auto (not the 0% that the "flex: 1" shorthand implies) —
+     with 8 tabs now and white-space: nowrap below, a 0% basis tells the
+     wrap algorithm every tab already "fits" before flex-grow expands them,
+     so on a narrow screen they all got forced onto one line and clipped
+     instead of wrapping. auto uses each tab's actual (nowrap) content width
+     for that decision, so this still fills one neat equal-width row when
+     there's room, and wraps into a pill grid — like .feature-toggle-group —
+     when there isn't. */
+  flex: 1 1 auto;
   background: transparent;
   color: var(--on-surface-variant);
   padding: 0.55rem 1rem;
@@ -2193,6 +2492,32 @@ button.danger {
   letter-spacing: 0.08em;
   font-weight: 600;
   background: var(--surface-container-low);
+}
+
+/* The Admin Portal's user table reuses .contact-table's look, but with 5
+   plain columns instead of contacts' checkbox+avatar+4-field layout — an
+   ID-scoped override (outranks the class-based nth-child widths above
+   regardless of source order) so Username/Created aren't squeezed into the
+   narrow checkbox/avatar column widths meant for that other table. */
+#user-list th:first-child,
+#user-list td:first-child {
+  width: 17%;
+  padding-left: 1.25rem;
+}
+
+#user-list th:nth-child(2),
+#user-list td:nth-child(2) {
+  width: 18%;
+}
+
+#user-list th:nth-child(3),
+#user-list td:nth-child(3) {
+  width: 26%;
+}
+
+#user-list th:nth-child(4),
+#user-list td:nth-child(4) {
+  width: 16%;
 }
 
 .contact-table tbody tr {
@@ -3470,32 +3795,36 @@ textarea {
   }
 
   /* ---------- Tables become stacked cards ---------- */
-  /* Works uniformly across bookmark/contact/file tables because all three
-     share the same shape: an unlabeled leading checkbox/icon cell, labeled
-     value cells (given data-label="…" at render time), and a trailing
-     unlabeled actions cell. */
+  /* Works uniformly across bookmark/contact/file/password tables because all
+     four share the same shape: an unlabeled leading checkbox/icon cell,
+     labeled value cells (given data-label="…" at render time), and a
+     trailing unlabeled actions cell. */
 
   .bookmark-table,
   .contact-table,
-  .file-table {
+  .file-table,
+  .password-table {
     display: block;
   }
 
   .bookmark-table thead,
   .contact-table thead,
-  .file-table thead {
+  .file-table thead,
+  .password-table thead {
     display: none;
   }
 
   .bookmark-table tbody,
   .contact-table tbody,
-  .file-table tbody {
+  .file-table tbody,
+  .password-table tbody {
     display: block;
   }
 
   .bookmark-table tr,
   .contact-table tr,
-  .file-table tr {
+  .file-table tr,
+  .password-table tr {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -3510,7 +3839,8 @@ textarea {
 
   .bookmark-table td,
   .contact-table td,
-  .file-table td {
+  .file-table td,
+  .password-table td {
     display: block;
     width: auto;
     padding: 0;
@@ -3521,13 +3851,15 @@ textarea {
 
   .bookmark-table td:first-child,
   .contact-table td:first-child,
-  .file-table td:first-child {
+  .file-table td:first-child,
+  .password-table td:first-child {
     flex: 0 0 auto;
   }
 
   .bookmark-table td:last-child,
   .contact-table td:last-child,
-  .file-table td:last-child {
+  .file-table td:last-child,
+  .password-table td:last-child {
     flex: 1 1 100%;
     display: flex;
     flex-wrap: wrap;
@@ -3537,17 +3869,50 @@ textarea {
 
   .bookmark-table td[data-label],
   .contact-table td[data-label],
-  .file-table td[data-label] {
+  .file-table td[data-label],
+  .password-table td[data-label] {
     flex: 1 1 auto;
     min-width: 45%;
   }
 
   .bookmark-table td[data-label]::before,
   .contact-table td[data-label]::before,
-  .file-table td[data-label]::before {
+  .file-table td[data-label]::before,
+  .password-table td[data-label]::before {
     content: attr(data-label) ': ';
     font-weight: 500;
     color: var(--on-surface-variant);
+  }
+
+  /* The Password cell holds a masked value plus reveal/copy touch targets —
+     too cramped at the generic 45% two-per-row width, so it gets its own
+     full-width row instead, right above the equally full-width Actions row. */
+  .password-table td[data-label='Password'] {
+    flex: 1 1 100%;
+    min-width: 0;
+    margin-top: 0.15rem;
+  }
+
+  /* inline-flex so this sits right on the same line as the [data-label]::before
+     "Password: " prefix above — the prefix is inline content, and a block-level
+     flex container (the desktop default) would otherwise drop to its own line
+     below it instead of flowing next to it like every plain-text field does. */
+  .password-table .password-reveal-cell {
+    display: inline-flex;
+    justify-content: flex-start;
+    max-width: 100%;
+    vertical-align: middle;
+  }
+
+  /* An inline-flex parent sizes to fit its content (shrink-to-fit) rather
+     than the card's available width, so .password-value's own `flex: 1;
+     min-width: 0` has nothing to shrink against and never truncates — a
+     long revealed password would otherwise force the whole row to overflow
+     or wrap. A hard cap makes the ellipsis kick in regardless of parent
+     sizing, leaving room for the label text and both icon buttons. */
+  .password-table .password-value {
+    flex: 0 1 auto;
+    max-width: 38vw;
   }
 }
 

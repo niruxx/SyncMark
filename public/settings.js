@@ -1,5 +1,6 @@
 const themeSelect = document.getElementById('theme-select');
 const viewSelect = document.getElementById('default-view-select');
+const schemePicker = document.getElementById('settings-scheme-picker');
 const statTotal = document.getElementById('stat-total');
 const statFolders = document.getElementById('stat-folders');
 const statContacts = document.getElementById('stat-contacts');
@@ -59,33 +60,6 @@ const avatarFile = document.getElementById('avatar-file');
 const avatarRemoveBtn = document.getElementById('avatar-remove-btn');
 const avatarError = document.getElementById('avatar-error');
 
-// --- Backup tab ---
-const backupEnabledToggle = document.getElementById('backup-enabled-toggle');
-const backupFrequencySelect = document.getElementById('backup-frequency-select');
-const backupRetentionInput = document.getElementById('backup-retention-input');
-const backupDirInput = document.getElementById('backup-dir-input');
-const backupScheduleError = document.getElementById('backup-schedule-error');
-const backupRunNowBtn = document.getElementById('backup-run-now-btn');
-const backupsList = document.getElementById('backups-list');
-const backupsEmptyHint = document.getElementById('backups-empty-hint');
-const restoreBackupModal = document.getElementById('restore-backup-modal');
-const restoreBackupSubtitle = document.getElementById('restore-backup-subtitle');
-const restoreBackupForm = document.getElementById('restore-backup-form');
-const restoreBackupPassword = document.getElementById('restore-backup-password');
-const restoreBackupError = document.getElementById('restore-backup-error');
-const restoreBackupCancel = document.getElementById('restore-backup-cancel');
-const backupModulesGroup = document.getElementById('backup-modules-group');
-const restoreModulesGroup = document.getElementById('restore-modules-group');
-
-const MODULE_LABELS = {
-  bookmarks: 'Bookmarks',
-  contacts: 'Contacts',
-  calendar: 'Calendar',
-  files: 'Files',
-  passwords: 'Passwords',
-  account: 'Account & settings',
-};
-
 async function api(path, options) {
   progress.start();
   let res;
@@ -116,6 +90,24 @@ themeSelect.addEventListener('change', () => {
 
 viewSelect.addEventListener('change', () => {
   localStorage.setItem('syncmark:view', viewSelect.value);
+});
+
+function setSelectedScheme(scheme) {
+  for (const btn of schemePicker.querySelectorAll('.scheme-swatch')) {
+    const selected = btn.dataset.scheme === scheme;
+    btn.classList.toggle('is-selected', selected);
+    btn.setAttribute('aria-pressed', String(selected));
+  }
+}
+
+setSelectedScheme(localStorage.getItem('syncmark:colorScheme') || 'blue');
+
+schemePicker.addEventListener('click', (e) => {
+  const btn = e.target.closest('.scheme-swatch');
+  if (!btn) return;
+  setSelectedScheme(btn.dataset.scheme);
+  document.documentElement.setAttribute('data-scheme', btn.dataset.scheme);
+  localStorage.setItem('syncmark:colorScheme', btn.dataset.scheme);
 });
 
 async function loadStats() {
@@ -473,225 +465,6 @@ passwordForm.addEventListener('submit', async (e) => {
   }
 });
 
-// --- Backup ---
-
-async function loadBackupSchedule() {
-  try {
-    const schedule = await api('/backups/schedule');
-    setPressed(backupEnabledToggle, schedule.enabled);
-    backupFrequencySelect.value = schedule.frequency;
-    backupRetentionInput.value = schedule.retentionCount;
-    backupDirInput.value = schedule.dir || '';
-    backupDirInput.placeholder = `Default: ${schedule.effectiveDir}`;
-    for (const btn of backupModulesGroup.querySelectorAll('.feature-toggle-btn')) {
-      setPressed(btn, (schedule.modules || []).includes(btn.dataset.module));
-    }
-  } catch {
-    /* leave defaults */
-  }
-}
-
-async function saveBackupSchedule(patch) {
-  backupScheduleError.hidden = true;
-  try {
-    await api('/backups/schedule', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    showToast('Backup settings saved', 'success');
-  } catch (err) {
-    backupScheduleError.textContent = err.message;
-    backupScheduleError.hidden = false;
-    await loadBackupSchedule();
-  }
-}
-
-backupEnabledToggle.addEventListener('click', () => {
-  const next = !isPressed(backupEnabledToggle);
-  setPressed(backupEnabledToggle, next);
-  saveBackupSchedule({ enabled: next });
-});
-backupFrequencySelect.addEventListener('change', () => saveBackupSchedule({ frequency: backupFrequencySelect.value }));
-backupRetentionInput.addEventListener('change', () => saveBackupSchedule({ retentionCount: Number(backupRetentionInput.value) }));
-backupDirInput.addEventListener('change', () => saveBackupSchedule({ dir: backupDirInput.value.trim() }));
-
-for (const btn of backupModulesGroup.querySelectorAll('.feature-toggle-btn')) {
-  btn.addEventListener('click', () => {
-    const nextOn = !isPressed(btn);
-    const stillSelected = [...backupModulesGroup.querySelectorAll('.feature-toggle-btn')].filter((b) =>
-      b === btn ? nextOn : isPressed(b)
-    );
-    if (stillSelected.length === 0) {
-      backupScheduleError.textContent = 'Select at least one module to back up.';
-      backupScheduleError.hidden = false;
-      return;
-    }
-    setPressed(btn, nextOn);
-    saveBackupSchedule({ modules: stillSelected.map((b) => b.dataset.module) });
-  });
-}
-
-function formatBackupSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function loadBackups() {
-  try {
-    const backups = await api('/backups');
-    renderBackups(backups);
-  } catch {
-    backupsList.innerHTML = '';
-    backupsEmptyHint.hidden = false;
-  }
-}
-
-function renderBackups(backups) {
-  backupsList.innerHTML = '';
-  backupsEmptyHint.hidden = backups.length > 0;
-
-  for (const backup of backups) {
-    const li = document.createElement('li');
-    li.className = 'folders-manage-row';
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'folders-manage-name';
-    const when = new Date(backup.modifiedAt).toLocaleString();
-    const moduleList = (backup.modules || []).map((m) => MODULE_LABELS[m] || m).join(', ') || 'Unknown contents';
-    nameSpan.textContent = `${when} — ${formatBackupSize(backup.size)} — ${moduleList}`;
-
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-
-    const downloadLink = document.createElement('a');
-    downloadLink.className = 'button secondary';
-    downloadLink.href = `/api/backups/${encodeURIComponent(backup.name)}/download`;
-    downloadLink.setAttribute('download', '');
-    downloadLink.textContent = 'Download';
-
-    const restoreBtn = document.createElement('button');
-    restoreBtn.type = 'button';
-    restoreBtn.className = 'secondary';
-    restoreBtn.textContent = 'Restore';
-    restoreBtn.addEventListener('click', () => openRestoreBackupModal(backup));
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'danger';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', () => deleteBackup(backup));
-
-    actions.append(downloadLink, restoreBtn, deleteBtn);
-    li.append(nameSpan, actions);
-    backupsList.appendChild(li);
-  }
-}
-
-async function deleteBackup(backup) {
-  const confirmed = await confirmDialog(`Delete the backup from ${new Date(backup.modifiedAt).toLocaleString()}?`, { danger: true });
-  if (!confirmed) return;
-
-  try {
-    await api(`/backups/${encodeURIComponent(backup.name)}`, { method: 'DELETE' });
-    await loadBackups();
-    showToast('Backup deleted', 'success');
-  } catch (err) {
-    showToast(`Failed to delete backup: ${err.message}`, 'error');
-  }
-}
-
-backupRunNowBtn.addEventListener('click', async () => {
-  backupRunNowBtn.disabled = true;
-  try {
-    await api('/backups/run', { method: 'POST' });
-    await loadBackups();
-    showToast('Backup created', 'success');
-  } catch (err) {
-    showToast(`Backup failed: ${err.message}`, 'error');
-  } finally {
-    backupRunNowBtn.disabled = false;
-  }
-});
-
-let pendingRestoreBackup = null;
-
-function openRestoreBackupModal(backup) {
-  pendingRestoreBackup = backup;
-  restoreBackupSubtitle.textContent = `This replaces the selected modules' data with the backup from ${new Date(backup.modifiedAt).toLocaleString()}. If Account & settings is included, you'll need to sign in again afterward. There is no undo. Enter your password to confirm.`;
-
-  restoreModulesGroup.innerHTML = '';
-  const modules = backup.modules && backup.modules.length ? backup.modules : Object.keys(MODULE_LABELS);
-  for (const key of modules) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'feature-toggle-btn is-on';
-    btn.dataset.module = key;
-    btn.setAttribute('aria-pressed', 'true');
-    btn.textContent = MODULE_LABELS[key] || key;
-    btn.addEventListener('click', () => {
-      const nextOn = !isPressed(btn);
-      const stillSelected = [...restoreModulesGroup.querySelectorAll('.feature-toggle-btn')].filter((b) =>
-        b === btn ? nextOn : isPressed(b)
-      );
-      if (stillSelected.length === 0) {
-        restoreBackupError.textContent = 'Select at least one module to restore.';
-        restoreBackupError.hidden = false;
-        return;
-      }
-      restoreBackupError.hidden = true;
-      setPressed(btn, nextOn);
-    });
-    restoreModulesGroup.appendChild(btn);
-  }
-
-  restoreBackupPassword.value = '';
-  restoreBackupError.hidden = true;
-  restoreBackupModal.classList.add('is-open');
-  restoreBackupPassword.focus();
-}
-
-function closeRestoreBackupModal() {
-  restoreBackupModal.classList.remove('is-open');
-  pendingRestoreBackup = null;
-}
-
-restoreBackupCancel.addEventListener('click', closeRestoreBackupModal);
-restoreBackupModal.addEventListener('click', (e) => {
-  if (e.target === restoreBackupModal) closeRestoreBackupModal();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && restoreBackupModal.classList.contains('is-open')) closeRestoreBackupModal();
-});
-
-restoreBackupForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  restoreBackupError.hidden = true;
-  if (!pendingRestoreBackup) return;
-
-  const selectedModules = [...restoreModulesGroup.querySelectorAll('.feature-toggle-btn')]
-    .filter((b) => isPressed(b))
-    .map((b) => b.dataset.module);
-  if (selectedModules.length === 0) {
-    restoreBackupError.textContent = 'Select at least one module to restore.';
-    restoreBackupError.hidden = false;
-    return;
-  }
-
-  try {
-    await api(`/backups/${encodeURIComponent(pendingRestoreBackup.name)}/restore`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: restoreBackupPassword.value, modules: selectedModules }),
-    });
-    location.reload();
-  } catch (err) {
-    restoreBackupError.textContent = err.message;
-    restoreBackupError.hidden = false;
-  }
-});
-
 // --- Tabs ---
 
 const tabButtons = document.querySelectorAll('.settings-tab');
@@ -928,6 +701,4 @@ loadAccountBadge();
 loadFeatures();
 loadLocations();
 loadAccount();
-loadBackupSchedule();
-loadBackups();
 applyFeatureGate();

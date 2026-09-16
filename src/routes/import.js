@@ -47,7 +47,7 @@ router.post('/import', upload.single('file'), (req, res) => {
     return res.status(422).json({ error: 'No bookmarks found in the uploaded file' });
   }
 
-  const imported = insertManyBookmarks(valid);
+  const imported = insertManyBookmarks(req.user.id, valid);
   res.json({ imported });
 });
 

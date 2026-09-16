@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — SyncMark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="theme.js"></script>
+</head>
+<body>
+  <!-- No shared top nav (Bookmarks/Contacts/.../Settings): the admin account
+       has no personal workspace, just this portal. -->
+  <div id="app-shell" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="brand">
+          <span class="material-symbols-outlined brand-icon">shield_person</span>
+          <h1>SyncMark Admin</h1>
+        </span>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="account-menu">
+          <button type="button" class="account-btn" id="account-menu-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="account-icon material-symbols-outlined">person</span>
+            <span id="account-username">Admin</span>
+            <span class="material-symbols-outlined account-caret">expand_more</span>
+          </button>
+          <div class="account-dropdown" id="account-dropdown">
+            <button type="button" class="account-dropdown-item danger" id="account-sign-out-btn">
+              <span class="material-symbols-outlined">logout</span>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main class="content settings-page">
+        <div class="settings-tabs" role="tablist">
+          <button type="button" class="settings-tab active" data-tab="users" role="tab" aria-selected="true">Users</button>
+          <button type="button" class="settings-tab" data-tab="backups" role="tab" aria-selected="false">Backups</button>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="users">
+        <section class="settings-section">
+          <h2>Users</h2>
+          <p class="settings-hint">
+            Each user has their own private bookmarks, contacts, calendar, passwords, and files — completely
+            separate from every other user. Saved passwords are never shown here, only which sites/usernames a
+            user has saved a login for.
+          </p>
+          <div class="toolbar">
+            <button type="button" id="add-user-btn" class="button">
+              <span class="material-symbols-outlined">person_add</span>
+              Add user
+            </button>
+            <span id="user-count"></span>
+          </div>
+
+          <table class="contact-table" id="user-list">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Created</th>
+                <th>Data</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="user-rows"></tbody>
+          </table>
+
+          <p id="empty-state" class="empty-state" hidden>No users yet — add one to get started.</p>
+        </section>
+
+        <section class="settings-section">
+          <h2>Danger zone</h2>
+          <div class="settings-row">
+            <div>
+              <p class="settings-hint">
+                Permanently delete every account on this instance — including this admin account — and every
+                bookmark, contact, event, password, and file location anyone has. This instance is returned to
+                first-run setup, exactly like a fresh install. This cannot be undone.
+              </p>
+            </div>
+            <button type="button" id="reset-instance-btn" class="danger">Reset SyncMark</button>
+          </div>
+        </section>
+        </div>
+
+        <div class="settings-tab-panel" data-tab-panel="backups" hidden>
+        <section class="settings-section">
+          <h2>Automatic backups</h2>
+          <p class="settings-hint">
+            A backup covers every user's data at once — including the actual files under any File Manager
+            locations, not just their configured paths. Point the directory below at a synced cloud folder
+            (rclone, Dropbox, OneDrive, a network share) to get real off-machine copies; left blank, backups are
+            kept in <code>data/backups</code> on this server.
+          </p>
+          <button type="button" class="feature-toggle-btn" id="backup-enabled-toggle" aria-pressed="false">Back up automatically</button>
+          <div class="settings-row">
+            <label for="backup-frequency-select">Frequency</label>
+            <select id="backup-frequency-select">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="backup-retention-input">Keep this many backups</label>
+            <input type="number" id="backup-retention-input" min="1" max="100" style="max-width: 100px" />
+          </div>
+          <div class="settings-row">
+            <label for="backup-dir-input">Backup directory (optional)</label>
+            <input type="text" id="backup-dir-input" placeholder="Default: data/backups" />
+          </div>
+          <div>
+            <span class="contact-field-label">What to back up</span>
+            <p class="settings-hint">Applies to both automatic backups and "Back up now" below.</p>
+            <div class="feature-toggle-group" id="backup-modules-group">
+              <button type="button" class="feature-toggle-btn" data-module="bookmarks" aria-pressed="false">Bookmarks</button>
+              <button type="button" class="feature-toggle-btn" data-module="contacts" aria-pressed="false">Contacts</button>
+              <button type="button" class="feature-toggle-btn" data-module="calendar" aria-pressed="false">Calendar</button>
+              <button type="button" class="feature-toggle-btn" data-module="files" aria-pressed="false">Files</button>
+              <button type="button" class="feature-toggle-btn" data-module="passwords" aria-pressed="false">Passwords</button>
+              <button type="button" class="feature-toggle-btn" data-module="account" aria-pressed="false">Accounts &amp; settings</button>
+            </div>
+          </div>
+          <p class="modal-error" id="backup-schedule-error" hidden></p>
+          <div class="settings-row">
+            <div>
+              <p class="settings-hint">Create a backup right now, using the settings above.</p>
+            </div>
+            <button type="button" id="backup-run-now-btn" class="secondary">Back up now</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Restore points</h2>
+          <ul class="folders-manage-list" id="backups-list"></ul>
+          <p class="folders-manage-empty" id="backups-empty-hint" hidden>No backups yet.</p>
+        </section>
+        </div>
+      </main>
+    </div>
+
+    <!-- Add / edit user -->
+    <div class="modal-backdrop" id="user-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-heading">
+        <h2 id="user-modal-heading">Add user</h2>
+        <form id="user-form">
+          <label>
+            Username
+            <input type="text" id="user-username-input" required autocomplete="off" />
+          </label>
+          <label>
+            Password
+            <input type="password" id="user-password-input" autocomplete="new-password" minlength="8" />
+          </label>
+          <p class="settings-hint" id="user-password-hint" hidden>Leave blank to keep the current password.</p>
+          <p class="modal-error" id="user-modal-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="user-modal-cancel-btn" class="secondary">Cancel</button>
+            <button type="submit" id="user-modal-save-btn">Save</button>
+          </div>
+          <div class="danger-bar" id="user-modal-danger-bar" hidden>
+            <span class="material-symbols-outlined">warning</span>
+            Setting a new password here signs this user out of every device immediately — they'll need it to sign back in.
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Read-only detail view -->
+    <div class="modal-backdrop" id="user-detail-modal">
+      <div class="modal contact-card-modal" role="dialog" aria-modal="true" aria-labelledby="user-detail-heading">
+        <div class="contact-card-header">
+          <div class="contact-card-heading-group">
+            <h2 id="user-detail-heading">Username</h2>
+            <p class="contact-card-subtitle" id="user-detail-subtitle"></p>
+          </div>
+        </div>
+        <div class="contact-card-body" id="user-detail-body"></div>
+        <div class="modal-actions">
+          <button type="button" id="user-detail-close-btn" class="secondary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="restore-backup-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restore-backup-heading">
+        <h2 id="restore-backup-heading">Restore backup</h2>
+        <p class="settings-hint" id="restore-backup-subtitle">This replaces every user's data currently in SyncMark with the contents of this backup. There is no undo. Enter your password to confirm.</p>
+        <p class="settings-hint">Files under File Manager locations are added and overwritten from the backup, never deleted, so restoring is safe even if a location has changed since the backup was made.</p>
+        <div>
+          <span class="contact-field-label">What to restore</span>
+          <div class="feature-toggle-group" id="restore-modules-group"></div>
+        </div>
+        <form id="restore-backup-form">
+          <label>
+            Password
+            <input type="password" id="restore-backup-password" required autocomplete="current-password" />
+          </label>
+          <p class="modal-error" id="restore-backup-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="restore-backup-cancel" class="secondary">Cancel</button>
+            <button type="submit" id="restore-backup-confirm" class="danger">Restore</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="modal-backdrop" id="reset-instance-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-instance-heading">
+        <h2 id="reset-instance-heading">Reset SyncMark</h2>
+        <p class="settings-hint">
+          This permanently deletes every account on this instance — including this admin account — and every
+          bookmark, contact, event, password, and file location anyone has. You'll be signed out and returned to
+          first-run setup, exactly like a fresh install.
+        </p>
+        <form id="reset-instance-form">
+          <label>
+            Your (admin) password
+            <input type="password" id="reset-instance-password" required autocomplete="current-password" />
+          </label>
+          <label>
+            Type <strong>RESET</strong> to confirm
+            <input type="text" id="reset-instance-confirm" required autocomplete="off" autocapitalize="off" />
+          </label>
+          <p class="modal-error" id="reset-instance-error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="reset-instance-cancel" class="secondary">Cancel</button>
+            <button type="submit" id="reset-instance-submit" class="danger" disabled>Reset SyncMark</button>
+          </div>
+          <div class="danger-bar">
+            <span class="material-symbols-outlined">warning</span>
+            This is permanent — every account and everything anyone owns will be gone for good.
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="auth.js" data-next="admin.js"></script>
+</body>
+</html>
