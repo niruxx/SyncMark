@@ -86,6 +86,14 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 
 ### Linux — step by step
 
+**Shortcut — the install script.** Steps 1–3 and 5–10 below are automated by `scripts/install.sh`. From inside a `git clone` of the repo (step 4), as your normal user (not root):
+
+```bash
+bash scripts/install.sh
+```
+
+It installs Node.js 18+ via nvm if you don't have it, runs `npm ci --omit=dev` (offering to install a C/C++ toolchain only if the native `better-sqlite3` module fails to load), leaves `data/` alone, and then walks you through creating and enabling a **systemd service** so SyncMark starts at boot — showing a diff and asking before it would ever overwrite an existing unit file. Options: `--port 8080`, `--service yes|no|ask`, `--service-name NAME`, and `-y/--yes` for a non-interactive run (accepts every default, but never overwrites an existing unit). It's safe to re-run. The manual walkthrough below is the same thing, step by step.
+
 This is the fullest walkthrough because Linux is the one platform where a few things (which Node you get, whether a C/C++ toolchain exists) vary by distro and aren't handled for you. macOS and Windows users can skip to [Other platforms](#other-platforms) below.
 
 **1. Install Node.js via nvm, not your distro's package manager.**
@@ -260,6 +268,14 @@ Updating is: **back up → pull → install → restart**. Your data is never to
 - **[Resyncing an existing `git clone` install](#resyncing-an-existing-git-clone-install)** — the normal case: the same checkout you already have, brought up to date in place.
 - **[Reinstalling via a fresh `git clone`](#reinstalling-via-a-fresh-git-clone-keeping-your-data)** — moving to a new machine, or starting from a clean checkout instead of an existing one.
 - **[Downloading a fresh copy without git](#downloading-a-fresh-copy-without-git)** — the same as a fresh clone, but for a machine without git installed.
+
+**Shortcut — the update script.** On Linux, `scripts/update.sh` does the whole [resync](#resyncing-an-existing-git-clone-install) below for you:
+
+```bash
+bash scripts/update.sh
+```
+
+It fetches `origin`, shows the incoming commits and asks before doing anything, copies your database (via SQLite's online-backup API, so it's consistent even while the server runs) and `admin.json` to `data/pre-update-backups/` (newest 5 kept), stops the `syncmark` systemd service, fast-forwards the code, runs `npm ci --omit=dev`, starts the service again, and checks that it answers. If installing dependencies fails it rolls the code back to where you started and restarts the old version. It never touches anything in `data/` other than adding that backup folder, never runs `git clean`, and refuses to run over local edits to tracked files unless you pass `--discard-local-changes` (which only affects tracked files — never `data/`). If you're already current it just says so. Other options: `--branch NAME`, `--service-name NAME`, `-y/--yes`, `--force`, `--no-backup`, `--skip-install`, `--no-restart`. If you installed Node through nvm, the unit file pins that Node's absolute path — if you later remove that Node version, re-run `scripts/install.sh` to regenerate the unit.
 
 Either way, [Database migrations](#database-migrations) below, and the verify step included in Resyncing, apply the same.
 
