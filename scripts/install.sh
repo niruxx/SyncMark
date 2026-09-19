@@ -22,7 +22,7 @@ main() {
   SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   APP_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
-  local PORT=3000
+  local PORT=3000 PORT_SET=0
   local SERVICE_NAME=syncmark
   local SERVICE_MODE=ask     # ask | yes | no
   local ASSUME_YES=0
@@ -56,7 +56,8 @@ main() {
     cat <<EOF
 Usage: bash scripts/install.sh [options]
 
-  --port N           Port SyncMark listens on (default 3000)
+  --port N           Port SyncMark listens on (default 3000). Saved to data/config.json,
+                     which you can also edit by hand: {"port": 8080}
   --service MODE     systemd service: ask (default), yes, or no
   --service-name N   systemd unit name (default: syncmark)
   -y, --yes          Non-interactive: accept the default answer to every prompt
@@ -68,7 +69,7 @@ EOF
 
   while [ $# -gt 0 ]; do
     case "$1" in
-      --port) PORT="${2:-}"; shift 2 ;;
+      --port) PORT="${2:-}"; PORT_SET=1; shift 2 ;;
       --service) SERVICE_MODE="${2:-}"; shift 2 ;;
       --service-name) SERVICE_NAME="${2:-}"; shift 2 ;;
       -y|--yes) ASSUME_YES=1; shift ;;
@@ -188,6 +189,33 @@ EOF
     ok "data/ is ready (a fresh database is created on first start)"
   fi
 
+  # ---------- port (data/config.json) ----------
+  # The port lives in data/config.json ({"port": N}), read by the app itself, so
+  # it works the same under systemd, pm2, Docker, or plain `npm start` and
+  # survives updates. A PORT environment variable, if set, still overrides it.
+  local existing_port=""
+  existing_port="$(node -e '
+    try { const p = JSON.parse(require("fs").readFileSync("data/config.json", "utf8")).port; if (Number.isInteger(Number(p))) process.stdout.write(String(Number(p))); } catch {}
+  ' 2>/dev/null)" || true
+  if [ "$PORT_SET" = 1 ]; then
+    if [ "$existing_port" = "$PORT" ]; then
+      ok "data/config.json already sets port $PORT"
+    elif node -e '
+      const fs = require("fs"), f = "data/config.json";
+      let c = {};
+      if (fs.existsSync(f)) c = JSON.parse(fs.readFileSync(f, "utf8"));
+      c.port = Number(process.argv[1]);
+      fs.writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
+    ' "$PORT"; then
+      ok "Saved port $PORT to data/config.json"
+    else
+      die "data/config.json exists but isn't valid JSON — fix or remove it, then re-run."
+    fi
+  elif [ -n "$existing_port" ]; then
+    PORT="$existing_port"
+    ok "Using port $PORT from data/config.json"
+  fi
+
   # ---------- systemd ----------
   local UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
   local service_started=0
@@ -206,7 +234,6 @@ Type=simple
 User=$RUN_USER
 WorkingDirectory=$dir
 Environment=NODE_ENV=production
-Environment=PORT=$PORT
 ExecStart="$node" server.js
 Restart=on-failure
 RestartSec=3
@@ -260,7 +287,7 @@ EOF
   elif [ "$SERVICE_MODE" = yes ] || ask "Set up a systemd service ($SERVICE_NAME) so SyncMark runs automatically?" y; then
     if command -v ss >/dev/null 2>&1 && ss -ltn "sport = :$PORT" 2>/dev/null | grep -q LISTEN &&
        ! systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-      warn "Port $PORT is already in use by something other than $SERVICE_NAME — the service may fail to start (use --port to pick another)."
+      warn "Port $PORT is already in use by something other than $SERVICE_NAME — the service may fail to start (re-run with --port to pick another)."
     fi
     setup_service
   else
@@ -292,7 +319,7 @@ EOF
   if [ "$service_started" = 1 ]; then
     printf '  Status: sudo systemctl status %s     Logs: sudo journalctl -u %s -f\n' "$SERVICE_NAME" "$SERVICE_NAME"
   else
-    printf '  Start:  cd %q && PORT=%s npm start\n' "$APP_DIR" "$PORT"
+    printf '  Start:  cd %q && npm start\n' "$APP_DIR"
   fi
   printf '  Update: bash %q/scripts/update.sh   (keeps everything in data/)\n' "$APP_DIR"
   printf '  If a firewall is active, allow the port, e.g.  sudo ufw allow %s/tcp\n' "$PORT"

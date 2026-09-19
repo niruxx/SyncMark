@@ -162,7 +162,15 @@ EOF
       systemctl is-active --quiet "$SERVICE_NAME" && WAS_ACTIVE=1
       local envline
       envline="$(systemctl show "$SERVICE_NAME" -p Environment --value 2>/dev/null || true)"
-      if [[ "$envline" =~ (^|[[:space:]])PORT=([0-9]+) ]]; then PORT="${BASH_REMATCH[2]}"; fi
+      # A PORT env var in the unit wins at runtime; otherwise the app reads data/config.json.
+      if [[ "$envline" =~ (^|[[:space:]])PORT=([0-9]+) ]]; then
+        PORT="${BASH_REMATCH[2]}"
+      else
+        PORT="$(node -e '
+          try { const p = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).port; if (Number.isInteger(Number(p))) process.stdout.write(String(Number(p))); } catch {}
+        ' "$DATA_DIR/config.json" 2>/dev/null)" || true
+        PORT="${PORT:-3000}"
+      fi
     else
       warn "systemd unit '$SERVICE_NAME' exists but runs from '${unit_dir:-?}', not $APP_DIR — leaving it alone. Restart it yourself after the update."
     fi

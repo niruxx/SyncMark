@@ -92,7 +92,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 bash scripts/install.sh
 ```
 
-It installs Node.js 18+ via nvm if you don't have it, runs `npm ci --omit=dev` (offering to install a C/C++ toolchain only if the native `better-sqlite3` module fails to load), leaves `data/` alone, and then walks you through creating and enabling a **systemd service** so SyncMark starts at boot — showing a diff and asking before it would ever overwrite an existing unit file. Options: `--port 8080`, `--service yes|no|ask`, `--service-name NAME`, and `-y/--yes` for a non-interactive run (accepts every default, but never overwrites an existing unit). It's safe to re-run. The manual walkthrough below is the same thing, step by step.
+It installs Node.js 18+ via nvm if you don't have it, runs `npm ci --omit=dev` (offering to install a C/C++ toolchain only if the native `better-sqlite3` module fails to load), leaves `data/` alone, and then walks you through creating and enabling a **systemd service** so SyncMark starts at boot — showing a diff and asking before it would ever overwrite an existing unit file. Options: `--port 8080` (saved to `data/config.json` — see [Running on a non-default port](#running-on-a-non-default-port)), `--service yes|no|ask`, `--service-name NAME`, and `-y/--yes` for a non-interactive run (accepts every default, but never overwrites an existing unit). It's safe to re-run. The manual walkthrough below is the same thing, step by step.
 
 This is the fullest walkthrough because Linux is the one platform where a few things (which Node you get, whether a C/C++ toolchain exists) vary by distro and aren't handled for you. macOS and Windows users can skip to [Other platforms](#other-platforms) below.
 
@@ -236,7 +236,6 @@ Type=simple
 User=syncmark
 WorkingDirectory=/opt/syncmark
 ExecStart=/usr/bin/node server.js
-Environment=PORT=3000
 Restart=on-failure
 
 [Install]
@@ -415,7 +414,7 @@ Everything is configured through environment variables at the process level, or 
 
 | Setting | Where | Notes |
 | --- | --- | --- |
-| Port | `PORT` env var (default `3000`) | e.g. `PORT=8080 npm start` |
+| Port | `data/config.json` → `{ "port": 8080 }`, or `PORT` env var (default `3000`) | the env var wins if both are set — see [Running on a non-default port](#running-on-a-non-default-port) |
 | Data location | fixed at `data/bookmarks.sqlite3` | see [Data & backups](#data--backups) below |
 | Theme, color scheme, default view | Settings page (also asked during first-run setup) | five color schemes (Blue/Green/Purple/Orange/Rose) × light/dark; stored in the browser's `localStorage`, per-browser |
 | Session length | Settings → Session | `5m` / `hourly` / `monthly` / `permanent`; stored server-side, applies to your *next* sign-in |
@@ -460,11 +459,17 @@ All state — bookmarks, folders, your account, and active sessions — lives in
 
 ### Running on a non-default port
 
-```bash
-PORT=8080 npm start
+Create `data/config.json` (there's a `data/config.example.json` to copy) and set the port:
+
+```json
+{ "port": 8080 }
 ```
 
-(PowerShell: `$env:PORT=8080; npm start`. Docker/Compose: change the left-hand side of the `ports:` mapping — the app inside the container always listens on 3000.)
+Restart SyncMark and it listens on that port. The file sits next to the database, so it survives updates (`scripts/update.sh` never touches it), and it works the same under systemd, pm2, or plain `npm start` — there's no unit file or command line to edit. `scripts/install.sh --port 8080` writes this file for you. It's gitignored, like the rest of your instance-specific state.
+
+Precedence, highest first: the **`PORT` environment variable** (e.g. `PORT=8080 npm start`; PowerShell: `$env:PORT=8080; npm start`), then `data/config.json`, then the default `3000`. An invalid value — not a whole number from 1 to 65535, or malformed JSON — is ignored with a warning in the server log rather than stopping the server. If you previously set `Environment=PORT=...` in a systemd unit, it keeps winning over the JSON file; remove that line if you'd rather manage the port in `data/config.json`.
+
+Docker/Compose: change the left-hand side of the `ports:` mapping instead — the app inside the container should keep listening on 3000 (setting a different port in the bind-mounted `data/config.json` would also work, but then the right-hand side of `ports:` must match it).
 
 ## Multi-user & Admin Portal
 
