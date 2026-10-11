@@ -8,3 +8,4 @@ data/admin.json
 npm-debug.log*
 data/pre-update-backups/
 data/config.json
+.syncmark-install

@@ -480,16 +480,100 @@
     document.addEventListener('touchcancel', cancel, { passive: true });
   }
 
+  /* Light/dark toggle: injected into every page's top bar (just before the
+     account menu); the sign-in screen renders its own .theme-toggle. One
+     delegated listener drives both through theme.js's setTheme(). */
+  function themeToggleIcon() {
+    // Shows the theme you'd switch *to*, like most OS quick toggles.
+    return window.getTheme() === 'dark' ? 'light_mode' : 'dark_mode';
+  }
+
+  function themeToggleLabel() {
+    return window.getTheme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+  }
+
+  function syncThemeToggles(animate) {
+    document.querySelectorAll('.theme-toggle').forEach((btn) => {
+      const icon = btn.querySelector('.material-symbols-outlined');
+      if (icon) icon.textContent = themeToggleIcon();
+      btn.title = themeToggleLabel();
+      btn.setAttribute('aria-label', themeToggleLabel());
+      if (animate) {
+        btn.classList.remove('is-switching');
+        void btn.offsetWidth; // restart the icon swap animation
+        btn.classList.add('is-switching');
+      }
+    });
+  }
+
+  window.syncThemeToggles = syncThemeToggles;
+
+  function initThemeToggle() {
+    const actions = document.querySelector('.topbar-actions');
+    if (actions && !actions.querySelector('.theme-toggle')) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'theme-toggle';
+      btn.innerHTML = '<span class="material-symbols-outlined"></span>';
+      actions.insertBefore(btn, actions.querySelector('.account-menu'));
+    }
+    syncThemeToggles(false);
+  }
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.theme-toggle');
+    if (!btn) return;
+    window.setTheme(window.getTheme() === 'dark' ? 'light' : 'dark', btn);
+  });
+
+  document.addEventListener('syncmark:themechange', () => syncThemeToggles(true));
+
+  document.addEventListener('animationend', (e) => {
+    if (e.animationName === 'themeIconSwap') e.target.closest('.theme-toggle')?.classList.remove('is-switching');
+  });
+
+  /* Staggered list entrances: rows/cards rendered in one go get an
+     increasing --stagger index (style.css turns it into animation-delay),
+     so a fresh render ripples down instead of appearing all at once. */
+  function initListStagger() {
+    const STAGGER_CAP = 14;
+    const pending = new Set();
+
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1 && (node.tagName === 'TR' || node.classList.contains('bookmark-card'))) {
+            pending.add(node);
+          }
+        }
+      }
+      if (!pending.size) return;
+      let i = 0;
+      for (const node of pending) {
+        if (node.isConnected) node.style.setProperty('--stagger', String(Math.min(i++, STAGGER_CAP)));
+      }
+      pending.clear();
+    });
+
+    document.querySelectorAll('tbody, .bookmark-grid').forEach((list) => {
+      observer.observe(list, { childList: true });
+    });
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       initAccountMenu();
       initMobileNav();
       initSidebarDrawer();
+      initThemeToggle();
+      initListStagger();
     });
   } else {
     initAccountMenu();
     initMobileNav();
     initSidebarDrawer();
+    initThemeToggle();
+    initListStagger();
   }
   initLongPressContextMenu();
 

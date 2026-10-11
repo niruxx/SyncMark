@@ -218,9 +218,12 @@ EOF
   # ---------- stop, update code, install deps ----------
   service_stop()  { [ "$MANAGED" = 1 ] && [ "$WAS_ACTIVE" = 1 ] && { info "Stopping $SERVICE_NAME"; as_root systemctl stop "$SERVICE_NAME"; } || true; }
   service_start() { [ "$MANAGED" = 1 ] && [ "$WAS_ACTIVE" = 1 ] && { info "Starting $SERVICE_NAME"; as_root systemctl start "$SERVICE_NAME"; } || true; }
+  # A dependency install only counts as successful if the native SQLite
+  # module actually loads afterwards — otherwise the service would crash-loop.
   install_deps() {
     [ "$SKIP_INSTALL" = 1 ] && return 0
-    if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
+    if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi || return 1
+    node -e "require('better-sqlite3')" >/dev/null 2>&1 || { warn "better-sqlite3 installed but won't load"; return 1; }
   }
   sync_code() {
     if [ "$1" = hard ]; then
@@ -253,6 +256,17 @@ EOF
   ok "Dependencies up to date"
 
   # ---------- restart + verify ----------
+  # The unit pins an absolute node path (often inside ~/.nvm). If that Node
+  # has since been removed, the service can't start — say so plainly.
+  if [ "$MANAGED" = 1 ]; then
+    local exec_node
+    exec_node="$(systemctl show "$SERVICE_NAME" -p ExecStart --value 2>/dev/null | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -n 1)" || true
+    if [ -n "$exec_node" ] && [ ! -x "$exec_node" ]; then
+      warn "The $SERVICE_NAME unit runs $exec_node, which no longer exists."
+      warn "Re-run 'bash scripts/install.sh' to point the unit at your current Node, then restart the service."
+    fi
+  fi
+
   service_start
 
   if [ "$MANAGED" = 1 ] && [ "$WAS_ACTIVE" = 1 ]; then

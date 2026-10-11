@@ -10,7 +10,11 @@
 #      C/C++ build toolchain.
 #   2. Runs `npm ci --omit=dev` and verifies the SQLite module actually loads.
 #   3. Leaves data/ completely alone (creates it only if it doesn't exist).
-#   4. Offers to create/enable a systemd service so SyncMark starts at boot.
+#   4. Creates, enables and starts a systemd service so SyncMark starts at boot.
+#
+# Everything it adds to the system (OS packages that weren't already there,
+# nvm/Node, the systemd unit) is recorded in .syncmark-install, which
+# scripts/uninstall.sh reads to undo exactly that and nothing more.
 #
 # It never deletes or overwrites anything in data/, and it's safe to re-run.
 # Run `bash scripts/install.sh --help` for options.
@@ -24,7 +28,7 @@ main() {
 
   local PORT=3000 PORT_SET=0
   local SERVICE_NAME=syncmark
-  local SERVICE_MODE=ask     # ask | yes | no
+  local SERVICE_MODE=yes     # ask | yes | no
   local ASSUME_YES=0
   local NODE_MIN_MAJOR=18
   local PKG="" NODE_BIN="" RUN_USER=""
@@ -58,7 +62,8 @@ Usage: bash scripts/install.sh [options]
 
   --port N           Port SyncMark listens on (default 3000). Saved to data/config.json,
                      which you can also edit by hand: {"port": 8080}
-  --service MODE     systemd service: ask (default), yes, or no
+  --service MODE     systemd service: yes (default: create, enable at boot, start),
+                     ask (prompt for each step), or no
   --service-name N   systemd unit name (default: syncmark)
   -y, --yes          Non-interactive: accept the default answer to every prompt
                      (installs missing prerequisites, creates + enables + starts
@@ -90,6 +95,33 @@ EOF
   fi
   RUN_USER="$(id -un)"
 
+  # ---------- install manifest ----------
+  # Plain KEY=value lines; read by scripts/uninstall.sh. Git-ignored, and
+  # outside data/ so it's never mistaken for user data.
+  local MANIFEST="$APP_DIR/.syncmark-install"
+  manifest_get() { [ -f "$MANIFEST" ] && sed -n "s/^$1=//p" "$MANIFEST" | tail -n 1; return 0; }
+  manifest_set() {
+    local tmp
+    tmp="$(mktemp "$MANIFEST.XXXXXX")"
+    { [ -f "$MANIFEST" ] && grep -v "^$1=" "$MANIFEST" || true; printf '%s=%s\n' "$1" "$2"; } > "$tmp"
+    mv -f "$tmp" "$MANIFEST"
+  }
+  manifest_add_word() {
+    local key=$1 word=$2 current
+    current="$(manifest_get "$key")"
+    case " $current " in *" $word "*) return 0 ;; esac
+    manifest_set "$key" "${current:+$current }$word"
+  }
+
+  [ -n "$(manifest_get INSTALLED_AT)" ] || manifest_set INSTALLED_AT "$(date -Iseconds)"
+  manifest_set APP_DIR "$APP_DIR"
+  manifest_set RUN_USER "$RUN_USER"
+  # npm creates ~/.npm (its cache) on first use; only offer to remove it on
+  # uninstall if it didn't exist before SyncMark was first installed.
+  if [ -z "$(manifest_get NPM_CACHE_PREEXISTED)" ]; then
+    if [ -d "$HOME/.npm" ]; then manifest_set NPM_CACHE_PREEXISTED 1; else manifest_set NPM_CACHE_PREEXISTED 0; fi
+  fi
+
   as_root() { sudo "$@"; }
   if ! command -v sudo >/dev/null 2>&1; then
     as_root() { die "sudo is required for: $*  (install sudo, or run those steps manually as root)"; }
@@ -101,15 +133,37 @@ EOF
       if command -v "$m" >/dev/null 2>&1; then PKG="$m"; return; fi
     done
   }
+  pkg_is_installed() {
+    case "$PKG" in
+      apt-get) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
+      dnf|yum|zypper) rpm -q "$1" >/dev/null 2>&1 ;;
+      pacman)  pacman -Qq "$1" >/dev/null 2>&1 ;;
+      apk)     apk info -e "$1" >/dev/null 2>&1 ;;
+      *) return 1 ;;
+    esac
+  }
+  # Installs only what's missing, and records exactly those packages so the
+  # uninstaller never offers to remove something that was already there.
   pkg_install() {
     [ -n "$PKG" ] || die "No supported package manager found — install manually: $*"
+    local p missing=()
+    for p in "$@"; do pkg_is_installed "$p" || missing+=("$p"); done
+    if [ ${#missing[@]} -eq 0 ]; then
+      ok "Already installed: $*"
+      return 0
+    fi
+    info "Installing OS packages: ${missing[*]}"
     case "$PKG" in
-      apt-get) as_root apt-get update && as_root apt-get install -y "$@" ;;
-      dnf|yum) as_root "$PKG" install -y "$@" ;;
-      pacman)  as_root pacman -S --needed --noconfirm "$@" ;;
-      zypper)  as_root zypper --non-interactive install "$@" ;;
-      apk)     as_root apk add "$@" ;;
+      apt-get) as_root apt-get update && as_root apt-get install -y "${missing[@]}" ;;
+      dnf|yum) as_root "$PKG" install -y "${missing[@]}" ;;
+      pacman)  as_root pacman -S --needed --noconfirm "${missing[@]}" ;;
+      zypper)  as_root zypper --non-interactive install "${missing[@]}" ;;
+      apk)     as_root apk add "${missing[@]}" ;;
     esac
+    manifest_set PKG_MANAGER "$PKG"
+    for p in "${missing[@]}"; do
+      if pkg_is_installed "$p"; then manifest_add_word PACKAGES "$p"; fi
+    done
   }
   build_pkgs() {
     case "$PKG" in
@@ -146,8 +200,16 @@ EOF
     if [ ! -s "$NVM_DIR/nvm.sh" ]; then
       info "Installing nvm"
       curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+      manifest_set NVM_INSTALLED 1
+      manifest_set NVM_DIR "$NVM_DIR"
     fi
-    set +u; . "$NVM_DIR/nvm.sh"; nvm install --lts; set -u
+    local lts_before=""
+    set +u; . "$NVM_DIR/nvm.sh"; lts_before="$(nvm version 'lts/*' 2>/dev/null || true)"; nvm install --lts; set -u
+    # nvm was already there but this LTS wasn't: record just the Node version.
+    if [ "$lts_before" = "N/A" ] || [ -z "$lts_before" ]; then
+      manifest_set NVM_DIR "$NVM_DIR"
+      manifest_set NVM_NODE_VERSION "$(node -v)"
+    fi
     node_ok || die "Node.js installation did not produce a usable node/npm."
   fi
   NODE_BIN="$(readlink -f "$(command -v node)")"
@@ -257,6 +319,7 @@ EOF
         diff -u "$UNIT_PATH" "$tmp" || true
         if ask "Overwrite it?" n; then
           as_root install -m 644 "$tmp" "$UNIT_PATH"
+          manifest_set UNIT_CREATED 1
           ok "Updated $UNIT_PATH"
         else
           info "Keeping the existing unit file"
@@ -264,17 +327,21 @@ EOF
       fi
     else
       as_root install -m 644 "$tmp" "$UNIT_PATH"
+      manifest_set UNIT_CREATED 1
       ok "Wrote $UNIT_PATH"
     fi
     rm -f "$tmp"
+    manifest_set SERVICE_NAME "$SERVICE_NAME"
+    manifest_set UNIT_PATH "$UNIT_PATH"
 
     as_root systemctl daemon-reload
 
-    if ask "Enable $SERVICE_NAME so it starts automatically at boot?" y; then
+    # --service yes (the default) means "set it up to auto-start", no questions.
+    if [ "$SERVICE_MODE" = yes ] || ask "Enable $SERVICE_NAME so it starts automatically at boot?" y; then
       as_root systemctl enable "$SERVICE_NAME"
       ok "Enabled at boot"
     fi
-    if ask "Start (or restart) $SERVICE_NAME now?" y; then
+    if [ "$SERVICE_MODE" = yes ] || ask "Start (or restart) $SERVICE_NAME now?" y; then
       as_root systemctl restart "$SERVICE_NAME"
       service_started=1
     fi
@@ -322,6 +389,7 @@ EOF
     printf '  Start:  cd %q && npm start\n' "$APP_DIR"
   fi
   printf '  Update: bash %q/scripts/update.sh   (keeps everything in data/)\n' "$APP_DIR"
+  printf '  Remove: bash %q/scripts/uninstall.sh\n' "$APP_DIR"
   printf '  If a firewall is active, allow the port, e.g.  sudo ufw allow %s/tcp\n' "$PORT"
 }
 

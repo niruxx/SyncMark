@@ -14,6 +14,7 @@
   page.className = 'auth-page';
   page.innerHTML = `
     <div class="auth-bg" aria-hidden="true"></div>
+    <button type="button" class="theme-toggle auth-theme-toggle"><span class="material-symbols-outlined"></span></button>
     <div class="auth-card">
       <div class="auth-brand">
         <span class="material-symbols-outlined">bookmarks</span>
@@ -73,13 +74,13 @@
 
         <div id="setup-step-3" hidden>
           <div class="theme-picker" id="theme-picker">
-            <button type="button" class="theme-option is-selected" data-theme-choice="light" aria-pressed="true">
-              <span class="material-symbols-outlined">light_mode</span>
-              Light
-            </button>
             <button type="button" class="theme-option" data-theme-choice="dark" aria-pressed="false">
               <span class="material-symbols-outlined">dark_mode</span>
               Dark
+            </button>
+            <button type="button" class="theme-option" data-theme-choice="light" aria-pressed="false">
+              <span class="material-symbols-outlined">light_mode</span>
+              Light
             </button>
           </div>
         </div>
@@ -128,6 +129,7 @@
       </div>
     </div>`;
   document.body.appendChild(page);
+  if (window.syncThemeToggles) window.syncThemeToggles(false);
 
   const icon = page.querySelector('#lock-icon');
   const heading = page.querySelector('#lock-heading');
@@ -196,15 +198,22 @@
     localStorage.setItem('syncmark:colorScheme', btn.dataset.scheme);
   });
 
+  function syncThemePicker() {
+    const current = window.getTheme();
+    for (const b of themePicker.querySelectorAll('.theme-option')) {
+      const selected = b.dataset.themeChoice === current;
+      b.classList.toggle('is-selected', selected);
+      b.setAttribute('aria-pressed', String(selected));
+    }
+  }
+
+  syncThemePicker();
+  document.addEventListener('syncmark:themechange', syncThemePicker);
+
   themePicker.addEventListener('click', (e) => {
     const btn = e.target.closest('.theme-option');
     if (!btn) return;
-    for (const b of themePicker.querySelectorAll('.theme-option')) {
-      b.classList.toggle('is-selected', b === btn);
-      b.setAttribute('aria-pressed', String(b === btn));
-    }
-    document.documentElement.setAttribute('data-theme', btn.dataset.themeChoice);
-    localStorage.setItem('syncmark:theme', btn.dataset.themeChoice);
+    window.setTheme(btn.dataset.themeChoice, btn);
   });
 
   let mode = 'login';

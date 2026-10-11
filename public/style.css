@@ -1,5 +1,7 @@
-/* SyncMark — Material Design 3 (Google Photos idiom)
-   Tonal surfaces, pill shapes, elevation, Material Symbols icons. */
+/* SyncMark — Material Design 3 Expressive
+   Tonal surfaces, shape morphing, spring motion, Roboto Flex type,
+   Material Symbols icons. The "M3 Expressive layer" at the end of this file
+   refines the base components below; keep new component rules above it. */
 
 @view-transition {
   navigation: auto;
@@ -86,6 +88,35 @@ html.page-leaving {
   --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
   /* Long, gentle deceleration — for entrances that shouldn't draw the eye. */
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* M3 Expressive shape scale additions (between the base steps above). */
+  --corner-lg-plus: 20px;
+  --corner-xl-plus: 32px;
+  --corner-2xl: 48px;
+
+  /* M3 Expressive spring motion. Spatial springs overshoot (position, size,
+     shape); effects springs don't (colour, opacity). The cubic-bezier
+     values are the fallback; @supports below swaps in real spring curves. */
+  --spring-fast: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-default: cubic-bezier(0.3, 1.35, 0.5, 1);
+  --spring-slow: cubic-bezier(0.25, 1.2, 0.4, 1);
+  --spring-effects: cubic-bezier(0.31, 0.94, 0.34, 1);
+  --dur-fast: 350ms;
+  --dur-default: 500ms;
+  --dur-slow: 650ms;
+
+  --font-brand: 'Roboto Flex', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+}
+
+/* Sampled damped-spring curves (fast: damping 0.6 / stiffness 800; default:
+   0.8 / 380; effects: 0.9 / 200) — the same parameters M3 Expressive's
+   motion scheme uses. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --spring-fast: linear(0, 0.033, 0.118, 0.235, 0.367, 0.503, 0.631, 0.748, 0.847, 0.929, 0.992, 1.038, 1.069, 1.087, 1.094, 1.094, 1.087, 1.077, 1.065, 1.052, 1.04, 1.028, 1.018, 1.01, 1.003, 0.998, 0.994, 0.992, 0.991, 0.991, 0.991, 0.992, 0.993, 0.995, 0.996, 0.997, 1);
+    --spring-default: linear(0, 0.022, 0.078, 0.155, 0.245, 0.339, 0.432, 0.521, 0.603, 0.677, 0.742, 0.799, 0.846, 0.886, 0.919, 0.945, 0.966, 0.982, 0.994, 1.002, 1.008, 1.012, 1.014, 1.015, 1.015, 1.014, 1.013, 1.012, 1.011, 1.009, 1.008, 1.007, 1.005, 1.004, 1.003, 1.003, 1);
+    --spring-effects: linear(0, 0.012, 0.043, 0.088, 0.141, 0.201, 0.264, 0.327, 0.39, 0.45, 0.508, 0.562, 0.613, 0.659, 0.701, 0.74, 0.774, 0.805, 0.833, 0.857, 0.879, 0.898, 0.914, 0.928, 0.94, 0.951, 0.96, 0.967, 0.974, 0.979, 0.984, 0.987, 0.99, 0.993, 0.995, 0.997, 1);
+  }
 }
 
 [data-theme='dark'] {
@@ -231,7 +262,7 @@ html {
 body {
   margin: 0;
   overflow-x: hidden;
-  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  font-family: var(--font-brand);
   background: var(--surface-dim);
   color: var(--on-surface);
   transition: background-color 0.25s var(--ease), color 0.25s var(--ease);
@@ -4338,4 +4369,782 @@ textarea {
   color: var(--on-surface-variant);
   font-size: 0.8125rem;
   margin: -0.5rem 0 1.25rem;
+}
+
+/* =====================================================================
+   M3 Expressive layer
+   Refines the components above toward Material 3 Expressive: springier
+   motion, shape morphing on press/selection, bolder type, roomier shapes.
+   Deliberately limited to shape, motion, type and colour — layout and
+   sizing stay with the base rules (and their responsive overrides above),
+   so nothing here fights the mobile breakpoints.
+   ===================================================================== */
+
+/* ---------- Type ---------- */
+
+.topbar h1 {
+  font-weight: 650;
+  font-variation-settings: 'wdth' 112;
+  letter-spacing: -0.01em;
+  color: var(--on-surface);
+}
+
+.modal h2,
+.auth-card h2 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-variation-settings: 'wdth' 108;
+}
+
+.settings-section h2,
+.sidebar h2,
+.calendar-nav h2,
+.calendar-day-panel-header h2 {
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.stat-value {
+  font-weight: 750;
+  font-variation-settings: 'wdth' 120;
+  letter-spacing: -0.02em;
+}
+
+.button,
+button,
+.nav a {
+  font-weight: 600;
+}
+
+/* ---------- Brand ---------- */
+
+.brand-icon {
+  transition: transform var(--dur-default) var(--spring-fast);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .brand:hover .brand-icon {
+    transform: rotate(-12deg) scale(1.15);
+  }
+}
+
+/* ---------- Buttons: shape morphing ----------
+   Common buttons are pills at rest and squish toward a rounded square while
+   pressed — M3 Expressive's signature press feedback. Components with their
+   own shape language (menu rows, nav pills, toggles, chips) opt out here
+   and get bespoke morphs below. */
+
+/* :where() keeps these at the same specificity as the base `button` /
+   `.button` rules, so any component's own shape, hover or transition still
+   wins over them. */
+button:where(:not(.account-dropdown-item, .context-menu-item, .folder-btn, .scheme-swatch,
+    .theme-option, .breadcrumb-segment, .calendar-event-pill, .calendar-day-more,
+    .browse-server-item-btn, .duplicate-candidate, .contact-picker-option, .link-btn,
+    .day-events-item, .settings-tab, .view-btn, .kind-toggle-btn, .feature-toggle-btn,
+    .icon-btn, .star-btn, .account-btn, .folder-chevron, .password-visibility-btn,
+    .contact-field-remove, .theme-toggle, .tag-chip button, .generator-mode-toggle button)),
+.button:where(:not(.account-dropdown-item, .context-menu-item, .folder-btn, .scheme-swatch,
+    .theme-option, .breadcrumb-segment, .calendar-event-pill, .calendar-day-more,
+    .browse-server-item-btn, .duplicate-candidate, .contact-picker-option, .link-btn,
+    .day-events-item, .settings-tab, .view-btn, .kind-toggle-btn, .feature-toggle-btn,
+    .icon-btn, .star-btn, .account-btn, .folder-chevron, .password-visibility-btn,
+    .contact-field-remove, .theme-toggle, .tag-chip button, .generator-mode-toggle button)) {
+  border-radius: var(--corner-xl);
+  transition: box-shadow 0.2s var(--ease), background-color 0.2s var(--ease), color 0.2s var(--ease),
+    filter 0.2s var(--ease), opacity 0.2s var(--ease), border-radius var(--dur-fast) var(--spring-fast),
+    transform var(--dur-fast) var(--spring-fast);
+}
+
+button:where(:not(.account-dropdown-item, .context-menu-item, .folder-btn, .scheme-swatch,
+    .theme-option, .breadcrumb-segment, .calendar-event-pill, .calendar-day-more,
+    .browse-server-item-btn, .duplicate-candidate, .contact-picker-option, .link-btn,
+    .day-events-item, .settings-tab, .view-btn, .kind-toggle-btn, .feature-toggle-btn,
+    .icon-btn, .star-btn, .account-btn, .folder-chevron, .password-visibility-btn,
+    .contact-field-remove, .theme-toggle, .tag-chip button, .generator-mode-toggle button)):active:not(:disabled),
+.button:where(:not(.account-dropdown-item, .context-menu-item, .folder-btn, .scheme-swatch,
+    .theme-option, .breadcrumb-segment, .calendar-event-pill, .calendar-day-more,
+    .browse-server-item-btn, .duplicate-candidate, .contact-picker-option, .link-btn,
+    .day-events-item, .settings-tab, .view-btn, .kind-toggle-btn, .feature-toggle-btn,
+    .icon-btn, .star-btn, .account-btn, .folder-chevron, .password-visibility-btn,
+    .contact-field-remove, .theme-toggle, .tag-chip button, .generator-mode-toggle button)):active {
+  border-radius: var(--corner-md);
+}
+
+/* Filled buttons glow faintly in their own colour on hover — lifts them off
+   the aurora backdrop rather than adding a grey shadow under them. */
+button:where(:not(.secondary, .danger, .account-dropdown-item, .context-menu-item, .folder-btn, .scheme-swatch,
+    .theme-option, .breadcrumb-segment, .calendar-event-pill, .calendar-day-more,
+    .browse-server-item-btn, .duplicate-candidate, .contact-picker-option, .link-btn,
+    .day-events-item, .settings-tab, .view-btn, .kind-toggle-btn, .feature-toggle-btn,
+    .icon-btn, .star-btn, .account-btn, .folder-chevron, .password-visibility-btn,
+    .contact-field-remove, .theme-toggle, .tag-chip button, .generator-mode-toggle button)):hover,
+.button:where(:not(.secondary)):hover {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 22%, transparent),
+    0 8px 22px -6px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+/* The page's main action (Add bookmark / contact / event / password,
+   Upload) is an extended-FAB-style primary-container button. */
+.topbar-actions > .button:not(.secondary) {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-radius: var(--corner-lg);
+  padding: 0.75rem 1.35rem;
+  box-shadow: var(--elev-1);
+}
+
+.topbar-actions > .button:not(.secondary):hover {
+  box-shadow: var(--elev-2);
+  filter: none;
+}
+
+.topbar-actions > .button:not(.secondary):active {
+  border-radius: var(--corner-xl);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .topbar-actions > .button:not(.secondary) .material-symbols-outlined {
+    transition: transform var(--dur-default) var(--spring-fast);
+  }
+
+  .topbar-actions > .button:not(.secondary):hover .material-symbols-outlined {
+    transform: rotate(90deg);
+  }
+}
+
+/* Icon buttons: circle at rest, squircle while pressed. */
+.icon-btn,
+.star-btn,
+.view-btn,
+.folder-chevron,
+.password-visibility-btn,
+.contact-field-remove {
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease),
+    border-radius var(--dur-fast) var(--spring-fast), transform var(--dur-fast) var(--spring-fast);
+}
+
+.icon-btn:active,
+.view-btn:active,
+.folder-chevron:active,
+.password-visibility-btn:active,
+.contact-field-remove:active {
+  border-radius: var(--corner-md);
+  transform: scale(0.9);
+}
+
+.star-btn {
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease),
+    border-radius var(--dur-fast) var(--spring-fast), transform var(--dur-default) var(--spring-fast);
+}
+
+.star-btn:active {
+  border-radius: var(--corner-md);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .star-btn.active .material-symbols-outlined {
+    animation: starPop var(--dur-slow) var(--spring-fast);
+  }
+}
+
+@keyframes starPop {
+  0% { transform: scale(0.4) rotate(-45deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Selected toggles morph from round to square — the M3 Expressive cue for
+   "this one is on", readable even without the colour change. */
+.view-btn.active {
+  border-radius: var(--corner-md);
+}
+
+.view-toggle {
+  border-radius: var(--corner-lg-plus);
+}
+
+.feature-toggle-btn,
+.kind-toggle-btn,
+.settings-tab,
+.scheme-swatch,
+.theme-option {
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease), border-radius var(--dur-default) var(--spring-default),
+    transform var(--dur-fast) var(--spring-fast);
+}
+
+.feature-toggle-btn.is-on,
+.kind-toggle-btn.active {
+  border-radius: var(--corner-md);
+}
+
+.feature-toggle-btn.is-on .material-symbols-outlined,
+.kind-toggle-btn.active .material-symbols-outlined {
+  font-variation-settings: 'FILL' 1;
+}
+
+.feature-toggle-btn:active,
+.kind-toggle-btn:active,
+.settings-tab:active,
+.scheme-swatch:active,
+.theme-option:active {
+  transform: scale(0.95);
+}
+
+.scheme-swatch,
+.theme-option {
+  border-radius: var(--corner-xl);
+}
+
+.scheme-swatch.is-selected,
+.theme-option.is-selected {
+  border-radius: var(--corner-lg);
+}
+
+.scheme-swatch-dot {
+  transition: transform var(--dur-default) var(--spring-fast), border-radius var(--dur-default) var(--spring-default);
+}
+
+.scheme-swatch.is-selected .scheme-swatch-dot {
+  transform: scale(1.12) rotate(45deg);
+  border-radius: 30%;
+}
+
+.settings-tabs {
+  border-radius: var(--corner-xl);
+}
+
+.settings-tab.active {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-radius: var(--corner-lg);
+}
+
+/* ---------- Navigation ---------- */
+
+.nav a {
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease),
+    border-radius var(--dur-default) var(--spring-default), transform var(--dur-fast) var(--spring-fast);
+}
+
+.nav a:active {
+  transform: scale(0.94);
+}
+
+.nav a.active {
+  border-radius: var(--corner-md);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav a.active {
+    animation: navIndicatorIn var(--dur-default) var(--spring-default) both;
+  }
+}
+
+@keyframes navIndicatorIn {
+  from {
+    transform: scaleX(0.6);
+    opacity: 0.4;
+  }
+}
+
+.folder-btn {
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease),
+    border-radius var(--dur-default) var(--spring-default), transform var(--dur-fast) var(--spring-fast);
+}
+
+.folder-btn.active {
+  border-radius: var(--corner-lg);
+  font-weight: 700;
+}
+
+.folder-btn:active {
+  transform: scale(0.97);
+}
+
+/* ---------- Search ---------- */
+
+.topbar-search {
+  transition: background-color 0.2s var(--ease), box-shadow 0.3s var(--ease),
+    border-radius var(--dur-default) var(--spring-default);
+}
+
+.topbar-search:focus-within {
+  border-radius: var(--corner-lg);
+}
+
+.topbar-search .search-icon {
+  transition: transform var(--dur-default) var(--spring-fast), color 0.2s var(--ease);
+}
+
+.topbar-search:focus-within .search-icon {
+  color: var(--primary);
+  transform: scale(1.12) rotate(-8deg);
+}
+
+/* ---------- Theme toggle (top bar + sign-in screen) ---------- */
+
+.theme-toggle {
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease),
+    border-radius var(--dur-fast) var(--spring-fast), transform var(--dur-fast) var(--spring-fast);
+}
+
+.theme-toggle:hover {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-radius: var(--corner-md);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.theme-toggle:active {
+  transform: scale(0.88);
+}
+
+.theme-toggle .material-symbols-outlined {
+  font-size: 22px;
+  font-variation-settings: 'FILL' 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .theme-toggle.is-switching .material-symbols-outlined {
+    animation: themeIconSwap var(--dur-slow) var(--spring-default);
+  }
+}
+
+@keyframes themeIconSwap {
+  0% { transform: rotate(-120deg) scale(0.3); opacity: 0; }
+  100% { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+
+.auth-theme-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+}
+
+/* The circular reveal is driven from theme.js via the View Transitions API;
+   the page-navigation crossfade must not also run on top of it. */
+html.theme-transition::view-transition-old(root),
+html.theme-transition::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Browsers without View Transitions get a quick colour crossfade instead. */
+html.theme-fade *,
+html.theme-fade *::before,
+html.theme-fade *::after {
+  transition: background-color 0.35s var(--ease), color 0.35s var(--ease), border-color 0.35s var(--ease),
+    fill 0.35s var(--ease) !important;
+}
+
+/* ---------- Menus ---------- */
+
+.account-dropdown,
+.context-menu {
+  border-radius: var(--corner-lg);
+  padding: 0.5rem;
+}
+
+.account-dropdown {
+  transform-origin: top right;
+  transform: translateY(-8px) scale(0.86);
+  transition: opacity 0.18s var(--ease), transform var(--dur-default) var(--spring-default),
+    visibility 0s linear 0.18s;
+}
+
+.account-dropdown.open {
+  transform: translateY(0) scale(1);
+  transition: opacity 0.18s var(--ease), transform var(--dur-default) var(--spring-default);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .context-menu {
+    transform-origin: top left;
+    animation: menuIn var(--dur-default) var(--spring-default) both;
+  }
+
+  .account-dropdown.open > *,
+  .context-menu > * {
+    animation: menuItemIn 0.35s var(--ease-out-soft) backwards;
+  }
+
+  .account-dropdown.open > :nth-child(2),
+  .context-menu > :nth-child(2) { animation-delay: 30ms; }
+  .context-menu > :nth-child(3) { animation-delay: 60ms; }
+  .context-menu > :nth-child(4) { animation-delay: 90ms; }
+  .context-menu > :nth-child(n + 5) { animation-delay: 120ms; }
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes menuItemIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.account-dropdown-item,
+.context-menu-item {
+  border-radius: var(--corner-md);
+  transition: background-color 0.15s var(--ease), border-radius var(--dur-fast) var(--spring-fast),
+    padding var(--dur-fast) var(--spring-fast);
+}
+
+.account-dropdown-item:hover,
+.context-menu-item:hover {
+  border-radius: var(--corner-xl);
+  padding-left: 1.1rem;
+}
+
+.account-btn {
+  transition: background-color 0.15s var(--ease), transform var(--dur-fast) var(--spring-fast);
+}
+
+.account-btn:active {
+  transform: scale(0.95);
+}
+
+.account-caret {
+  transition: transform var(--dur-default) var(--spring-default);
+}
+
+.account-btn[aria-expanded='true'] .account-caret {
+  transform: rotate(180deg);
+}
+
+/* ---------- Surfaces & cards ---------- */
+
+.bookmark-card {
+  border-radius: var(--corner-xl);
+  transition: box-shadow 0.25s var(--ease), background-color 0.25s var(--ease),
+    border-radius var(--dur-default) var(--spring-default), transform var(--dur-default) var(--spring-default);
+}
+
+.bookmark-card:hover {
+  border-radius: var(--corner-lg-plus);
+  transform: translateY(-4px) scale(1.015);
+}
+
+.bookmark-card:active {
+  transform: scale(0.98);
+}
+
+.card-header .favicon {
+  transition: transform var(--dur-default) var(--spring-fast), border-radius var(--dur-default) var(--spring-default);
+}
+
+.bookmark-card:hover .card-header .favicon {
+  transform: rotate(-6deg) scale(1.1);
+  border-radius: 50%;
+}
+
+.folder-badge {
+  border-radius: var(--corner-full);
+}
+
+.settings-section {
+  border-radius: var(--corner-xl);
+}
+
+.stat-tile {
+  padding: 1rem 1.25rem;
+  border-radius: var(--corner-lg-plus);
+  background: var(--surface-container-low);
+  transition: transform var(--dur-default) var(--spring-default), border-radius var(--dur-default) var(--spring-default);
+}
+
+.stat-tile:hover {
+  transform: translateY(-3px);
+  border-radius: var(--corner-xl);
+}
+
+/* Table rows lean in when hovered — a spring nudge, not a layout change. */
+.bookmark-table tbody tr,
+.contact-table tbody tr,
+.file-table tbody tr,
+.password-table tbody tr {
+  transition: background-color 0.15s var(--ease), box-shadow 0.25s var(--spring-effects);
+}
+
+.bookmark-table tbody tr:hover,
+.contact-table tbody tr:hover,
+.file-table tbody tr:hover,
+.password-table tbody tr:hover {
+  box-shadow: inset 4px 0 0 var(--primary);
+}
+
+/* Scroll-linked entrance for long Settings pages, where supported. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .settings-section {
+      animation: sectionReveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
+}
+
+@keyframes sectionReveal {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.97);
+  }
+}
+
+/* ---------- Lists: staggered spring entrance ----------
+   ui.js sets --stagger on freshly rendered rows/cards (capped), so a
+   re-render ripples down the list instead of popping in at once. */
+
+@keyframes itemIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bookmark-table tbody tr,
+.contact-table tbody tr,
+.file-table tbody tr,
+.password-table tbody tr,
+.bookmark-card {
+  animation: itemIn var(--dur-default) var(--spring-default) both;
+  animation-delay: calc(var(--stagger, 0) * 28ms);
+}
+
+/* ---------- Inputs ---------- */
+
+.modal input,
+.modal textarea,
+.account-form input,
+.inline-form input,
+.folders-manage-row input,
+.auth-card input {
+  border-radius: var(--corner-md);
+  transition: border-color 0.15s var(--ease), box-shadow 0.25s var(--ease),
+    border-radius var(--dur-default) var(--spring-default);
+}
+
+.modal input:focus,
+.modal textarea:focus,
+.account-form input:focus,
+.inline-form input:focus,
+.folders-manage-row input:focus,
+.auth-card input:focus {
+  border-radius: var(--corner-lg);
+  box-shadow: inset 0 0 0 1px var(--primary), 0 0 0 4px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.sort-select {
+  transition: background-color 0.2s var(--ease), border-radius var(--dur-default) var(--spring-default);
+}
+
+.sort-select:focus-visible {
+  border-radius: var(--corner-md);
+}
+
+/* ---------- Dialogs ---------- */
+
+@media (min-width: 641px) {
+  .modal {
+    border-radius: var(--corner-xl-plus);
+  }
+}
+
+.modal {
+  transform: translateY(32px) scale(0.86);
+  transition: transform var(--dur-default) var(--spring-default), opacity 0.2s var(--ease);
+}
+
+.modal-backdrop.is-open .modal {
+  transform: none;
+}
+
+/* ---------- Snackbars ---------- */
+
+.toast {
+  border-radius: var(--corner-lg);
+  border-left: none;
+  padding-left: 1.25rem;
+  position: relative;
+  overflow: hidden;
+  font-weight: 500;
+  transform: translateY(24px) scale(0.8);
+  transition: opacity 0.25s var(--ease-out-soft), transform var(--dur-default) var(--spring-fast);
+}
+
+.toast::before {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  top: 0.65rem;
+  bottom: 0.65rem;
+  width: 4px;
+  border-radius: var(--corner-full);
+  background: var(--primary);
+}
+
+.toast-success::before { background: #1e8e3e; }
+.toast-error::before { background: var(--error); }
+
+.toast.show {
+  transform: none;
+}
+
+/* ---------- Progress: M3 Expressive wavy indicator ---------- */
+
+.progress-bar {
+  height: 8px;
+}
+
+.progress-bar-fill {
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='8'%3E%3Cpath d='M0 4 Q6 0.8 12 4 T24 4' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") 0 0 / 24px 8px repeat-x;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='8'%3E%3Cpath d='M0 4 Q6 0.8 12 4 T24 4' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") 0 0 / 24px 8px repeat-x;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .progress-bar.active .progress-bar-fill {
+    animation: waveTravel 0.9s linear infinite;
+  }
+}
+
+@keyframes waveTravel {
+  to {
+    -webkit-mask-position: 24px 0;
+    mask-position: 24px 0;
+  }
+}
+
+/* ---------- Sign-in / setup ---------- */
+
+.auth-card {
+  border-radius: var(--corner-2xl);
+}
+
+@media (max-width: 480px) {
+  .auth-card {
+    border-radius: var(--corner-xl);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-card {
+    animation: authCardIn var(--dur-slow) var(--spring-default) both;
+  }
+}
+
+@keyframes authCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.9);
+  }
+}
+
+/* The lock badge sits on a slowly turning scalloped "cookie" — one of the
+   M3 Expressive shape set. */
+.lock-icon {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  background: transparent;
+  border-radius: 0;
+}
+
+.lock-icon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--primary-container);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M99 50L97.4 54.1L93.3 57.6L89.1 60.5L86.6 63.3L86.7 67.1L88.1 72L88.9 77.3L87.5 81.5L83.6 83.6L78.3 83.7L73.2 83.1L69.5 83.8L67.1 86.7L65 91.3L62.3 95.9L58.5 98.3L54.1 97.4L50 94L46.5 90.3L43.2 88.4L39.5 89.1L35 91.3L29.9 93.1L25.5 92.4L22.7 88.9L21.7 83.7L21.4 78.6L20.1 75.1L16.9 73.2L11.9 72L6.9 70.1L4 66.8L4.1 62.3L6.7 57.6L9.7 53.5L11 50L9.7 46.5L6.7 42.4L4.1 37.7L4 33.2L6.9 29.9L11.9 28L16.9 26.8L20.1 24.9L21.4 21.4L21.7 16.3L22.7 11.1L25.5 7.6L29.9 6.9L35 8.7L39.5 10.9L43.2 11.6L46.5 9.7L50 6L54.1 2.6L58.5 1.7L62.3 4.1L65 8.7L67.1 13.3L69.5 16.2L73.2 16.9L78.3 16.3L83.6 16.4L87.5 18.5L88.9 22.7L88.1 28L86.7 32.9L86.6 36.7L89.1 39.5L93.3 42.4L97.4 45.9Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M99 50L97.4 54.1L93.3 57.6L89.1 60.5L86.6 63.3L86.7 67.1L88.1 72L88.9 77.3L87.5 81.5L83.6 83.6L78.3 83.7L73.2 83.1L69.5 83.8L67.1 86.7L65 91.3L62.3 95.9L58.5 98.3L54.1 97.4L50 94L46.5 90.3L43.2 88.4L39.5 89.1L35 91.3L29.9 93.1L25.5 92.4L22.7 88.9L21.7 83.7L21.4 78.6L20.1 75.1L16.9 73.2L11.9 72L6.9 70.1L4 66.8L4.1 62.3L6.7 57.6L9.7 53.5L11 50L9.7 46.5L6.7 42.4L4.1 37.7L4 33.2L6.9 29.9L11.9 28L16.9 26.8L20.1 24.9L21.4 21.4L21.7 16.3L22.7 11.1L25.5 7.6L29.9 6.9L35 8.7L39.5 10.9L43.2 11.6L46.5 9.7L50 6L54.1 2.6L58.5 1.7L62.3 4.1L65 8.7L67.1 13.3L69.5 16.2L73.2 16.9L78.3 16.3L83.6 16.4L87.5 18.5L88.9 22.7L88.1 28L86.7 32.9L86.6 36.7L89.1 39.5L93.3 42.4L97.4 45.9Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.lock-icon .material-symbols-outlined {
+  position: relative;
+  font-size: 32px;
+  font-variation-settings: 'FILL' 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lock-icon::before {
+    animation: cookieSpin 18s linear infinite;
+  }
+
+  .lock-icon .material-symbols-outlined {
+    animation: lockBob 3.2s ease-in-out infinite;
+  }
+}
+
+@keyframes cookieSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes lockBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.auth-submit {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  font-size: 0.95rem;
+}
+
+/* ---------- Calendar ---------- */
+
+.calendar-day {
+  transition: background-color 0.15s var(--ease);
+}
+
+.calendar-day.is-today .calendar-day-number {
+  transition: transform var(--dur-default) var(--spring-fast), border-radius var(--dur-default) var(--spring-default);
+}
+
+.calendar-day:hover.is-today .calendar-day-number {
+  transform: scale(1.12);
+  border-radius: 35%;
+}
+
+.calendar-event-pill {
+  transition: transform var(--dur-fast) var(--spring-fast), filter 0.15s var(--ease);
+}
+
+.calendar-event-pill:hover {
+  transform: scale(1.04);
+}
+
+/* ---------- Reduced motion ----------
+   Springs and morphs collapse to plain, instant state changes. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -80,12 +80,15 @@ async function api(path, options) {
   return res.json();
 }
 
-themeSelect.value = localStorage.getItem('syncmark:theme') || 'light';
+themeSelect.value = window.getTheme();
 viewSelect.value = localStorage.getItem('syncmark:view') || 'list';
 
 themeSelect.addEventListener('change', () => {
-  localStorage.setItem('syncmark:theme', themeSelect.value);
-  document.documentElement.setAttribute('data-theme', themeSelect.value);
+  window.setTheme(themeSelect.value, themeSelect);
+});
+
+document.addEventListener('syncmark:themechange', (e) => {
+  themeSelect.value = e.detail.theme;
 });
 
 viewSelect.addEventListener('change', () => {

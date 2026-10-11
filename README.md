@@ -33,7 +33,7 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 ## Features
 
 - Material Design 3 interface in the Google Photos idiom: tonal surfaces, pill-shaped nav and buttons, a prominent rounded search bar in the app bar, Material Symbols icons, elevation instead of borders, and Roboto throughout — plus deliberately-paced animated transitions between pages (via the CSS View Transitions API where supported, with an equivalent hand-rolled fade for browsers without it, e.g. Firefox)
-- Light and dark themes, both built on the same Material tonal palette (light by default; switch in Settings → Appearance)
+- Material 3 Expressive UI — spring motion, shape-morphing buttons and toggles, Roboto Flex type — with dark and light themes on the same tonal palette (dark by default; flip it from the sun/moon button in the top bar or the sign-in screen, or in Settings → Appearance)
 - A subtle, slow-drifting animated gradient behind the app (off automatically for anyone with reduced-motion preferences set) — only ever shown once you're signed in, never behind the sign-in/register screen
 - **A dedicated sign-in/register page on first run**: the first person to open SyncMark lands on a clean, standalone welcome page — a four-step wizard (your username/password + the admin account's password, a color scheme, light/dark, then which of Bookmarks/Contacts/Calendar/Files/Passwords to turn on — each choice previewed live against the wizard itself) rather than a dialog over a half-loaded app; after that, every visit opens a plain sign-in page before anything else loads. No email/SMTP involved anywhere — see [Resetting a forgotten password](#resetting-a-forgotten-password) for the CLI-based recovery path instead
 - **Multi-user, with a separate Admin Portal**: every account's bookmarks/contacts/calendar/passwords/files are completely private to it; a master admin account (bootstrapped from `data/admin.json`) creates and manages other users' accounts — rename, reset password, disable/enable, delete, and a read-only view of what's in an account — without ever seeing a saved password's secret or editing anyone's data directly. See [Multi-user & Admin Portal](#multi-user--admin-portal)
@@ -89,10 +89,20 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 **Shortcut — the install script.** Steps 1–3 and 5–10 below are automated by `scripts/install.sh`. From inside a `git clone` of the repo (step 4), as your normal user (not root):
 
 ```bash
-bash scripts/install.sh
+bash configure.sh
 ```
 
-It installs Node.js 18+ via nvm if you don't have it, runs `npm ci --omit=dev` (offering to install a C/C++ toolchain only if the native `better-sqlite3` module fails to load), leaves `data/` alone, and then walks you through creating and enabling a **systemd service** so SyncMark starts at boot — showing a diff and asking before it would ever overwrite an existing unit file. Options: `--port 8080` (saved to `data/config.json` — see [Running on a non-default port](#running-on-a-non-default-port)), `--service yes|no|ask`, `--service-name NAME`, and `-y/--yes` for a non-interactive run (accepts every default, but never overwrites an existing unit). It's safe to re-run. The manual walkthrough below is the same thing, step by step.
+`configure.sh` is a small menu (Install / Update / Uninstall) that shows whether SyncMark is already installed and running, then runs the matching script in `scripts/`. To skip the menu, name the action, and anything after it goes straight to that script: `bash configure.sh install --port 8080`, `bash configure.sh update -y`. Calling `bash scripts/install.sh` (or `update.sh`/`uninstall.sh`) directly still works the same way.
+
+It installs Node.js 18+ via nvm if you don't have it, runs `npm ci --omit=dev` (offering to install a C/C++ toolchain only if the native `better-sqlite3` module fails to load), leaves `data/` alone, and then creates, enables and starts a **systemd service** so SyncMark starts at boot — showing a diff and asking before it would ever overwrite an existing unit file. Options: `--port 8080` (saved to `data/config.json` — see [Running on a non-default port](#running-on-a-non-default-port)), `--service yes|ask|no` (default `yes`; `ask` prompts for each step), `--service-name NAME`, and `-y/--yes` for a non-interactive run (accepts every default, but never overwrites an existing unit). It records what it added to the system — OS packages that weren't already installed, nvm/Node, the unit file — in `.syncmark-install` (git-ignored), which the uninstaller reads. It's safe to re-run. The manual walkthrough below is the same thing, step by step.
+
+**Uninstalling.** `bash scripts/uninstall.sh` reverses the installer: it stops, disables and deletes the systemd unit and removes `node_modules/`. Everything else is a separate question with a cautious default:
+- **`data/`** (database, accounts, password vault, config, backups) is **kept** by default. If you choose to delete it, it's first archived to `~/syncmark-data-<date>.tar.gz` (skip that only with `--no-data-backup`, which also makes you type `DELETE`).
+- **nvm/Node.js** is offered for removal only if the installer put it there, and defaults to keep, since other projects may use it.
+- **OS packages** (e.g. `git`, `curl`, a compiler toolchain) are offered only if the installer itself installed them — never ones that were already on the system — with a warning that other software may now depend on them. The default is keep, and the package manager shows you its own removal list before it does anything.
+- **`--purge`** also deletes the SyncMark directory itself (archiving `data/` first if you kept it).
+
+Folders you registered as Files locations are never touched. Flags: `--keep-data`/`--delete-data`, `--remove-packages`/`--keep-packages`, `--purge`, `--service-name NAME`, `-y/--yes` (non-interactive: removes the service and `node_modules/` but keeps data and packages unless told otherwise).
 
 This is the fullest walkthrough because Linux is the one platform where a few things (which Node you get, whether a C/C++ toolchain exists) vary by distro and aren't handled for you. macOS and Windows users can skip to [Other platforms](#other-platforms) below.
 
@@ -161,7 +171,7 @@ npm start
 You should see `SyncMark running at http://localhost:3000`.
 
 **8. Open it and finish setup.**
-On the same machine, visit `http://localhost:3000`. Follow the on-screen four-step wizard: your username/password plus a password for the separate admin account (see [Multi-user & Admin Portal](#multi-user--admin-portal)), a color scheme, light or dark, then which tabs to turn on (Bookmarks/Contacts/Calendar default on, Files and Passwords default off — all changeable later in Settings → General → Features).
+On the same machine, visit `http://localhost:3000`. Follow the on-screen four-step wizard: your username/password plus a password for the separate admin account (see [Multi-user & Admin Portal](#multi-user--admin-portal)), a color scheme, dark or light, then which tabs to turn on (Bookmarks/Contacts/Calendar default on, Files and Passwords default off — all changeable later in Settings → General → Features).
 
 **9. (Optional) Reach it from your phone or another device on the same network.**
 Find the server's LAN IP (`ip addr show` or `hostname -I`), then open port 3000 to your LAN if a firewall is active:
@@ -274,7 +284,7 @@ Updating is: **back up → pull → install → restart**. Your data is never to
 bash scripts/update.sh
 ```
 
-It fetches `origin`, shows the incoming commits and asks before doing anything, copies your database (via SQLite's online-backup API, so it's consistent even while the server runs) and `admin.json` to `data/pre-update-backups/` (newest 5 kept), stops the `syncmark` systemd service, fast-forwards the code, runs `npm ci --omit=dev`, starts the service again, and checks that it answers. If installing dependencies fails it rolls the code back to where you started and restarts the old version. It never touches anything in `data/` other than adding that backup folder, never runs `git clean`, and refuses to run over local edits to tracked files unless you pass `--discard-local-changes` (which only affects tracked files — never `data/`). If you're already current it just says so. Other options: `--branch NAME`, `--service-name NAME`, `-y/--yes`, `--force`, `--no-backup`, `--skip-install`, `--no-restart`. If you installed Node through nvm, the unit file pins that Node's absolute path — if you later remove that Node version, re-run `scripts/install.sh` to regenerate the unit.
+It fetches `origin`, shows the incoming commits and asks before doing anything, copies your database (via SQLite's online-backup API, so it's consistent even while the server runs) and `admin.json` to `data/pre-update-backups/` (newest 5 kept), stops the `syncmark` systemd service, fast-forwards the code, runs `npm ci --omit=dev`, starts the service again, and checks that it answers. If installing dependencies fails (or the native SQLite module won't load afterwards) it rolls the code back to where you started and restarts the old version. It never touches anything in `data/` other than adding that backup folder, never runs `git clean`, and refuses to run over local edits to tracked files unless you pass `--discard-local-changes` (which only affects tracked files — never `data/`). If you're already current it just says so. Other options: `--branch NAME`, `--service-name NAME`, `-y/--yes`, `--force`, `--no-backup`, `--skip-install`, `--no-restart`. If you installed Node through nvm, the unit file pins that Node's absolute path — if you later remove that Node version, re-run `scripts/install.sh` to regenerate the unit.
 
 Either way, [Database migrations](#database-migrations) below, and the verify step included in Resyncing, apply the same.
 
