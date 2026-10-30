@@ -23,7 +23,7 @@ const DEFAULT_BACKUP_DIR = path.join(__dirname, '..', 'data', 'backups');
 // any app_settings key not claimed by another module, so a future setting
 // nobody remembered to classify still ends up somewhere sane by default.
 const MODULES = {
-  bookmarks: { label: 'Bookmarks', tables: ['bookmarks', 'folders'] },
+  bookmarks: { label: 'Bookmarks', tables: ['bookmarks', 'folders', 'bookmark_groups', 'bookmark_group_members', 'bookmark_shares', 'bookmark_share_grants', 'bookmark_sync'] },
   contacts: {
     label: 'Contacts',
     tables: ['contacts', 'contacts_tombstones', 'contact_groups', 'contact_group_members'],
@@ -35,7 +35,7 @@ const MODULES = {
     settingsKeys: (key) => key === 'events_seq',
   },
   files: { label: 'Files', tables: ['file_locations'], includesFileContents: true },
-  passwords: { label: 'Passwords', tables: ['passwords'] },
+  passwords: { label: 'Passwords', tables: ['passwords', 'vault_keys', 'password_attachments', 'password_folders', 'password_sharing_keys', 'password_shares'] },
   account: { label: 'Account & settings', tables: ['users'] },
 };
 const MODULE_KEYS = Object.keys(MODULES);
@@ -54,10 +54,11 @@ function normalizeModules(modules) {
 
 // BLOB columns need base64 round-tripping to survive JSON — everything else
 // already comes back from better-sqlite3 as strings/numbers.
-const BLOB_COLUMNS = { users: ['avatar'], contacts: ['photo'] };
+const BLOB_COLUMNS = { users: ['avatar'], contacts: ['photo'], password_attachments: ['ciphertext'] };
 
 function tableToJson(table) {
   const rows = db.prepare(`SELECT * FROM ${table}`).all();
+  if (table === 'bookmark_sync') return rows.map((row) => ({ ...row, lock_owner: null, lock_at: null, baseline: null, committed_hash: null, staged: null }));
   const blobCols = BLOB_COLUMNS[table] || [];
   if (blobCols.length === 0) return rows;
   return rows.map((row) => {
@@ -122,6 +123,7 @@ const restoreFromSnapshot = db.transaction((snapshot, selectedModules) => {
   const present = new Set(snapshot.modules || MODULE_KEYS);
   const selected = new Set(selectedModules || present);
   const applied = MODULE_KEYS.filter((key) => selected.has(key) && present.has(key));
+  if (applied.includes('passwords') || applied.includes('account')) db.exec('DELETE FROM password_clients');
 
   for (const key of applied) {
     for (const table of MODULES[key].tables) {
@@ -176,14 +178,8 @@ function walkFiles(rootDir) {
     }
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
-      let isDir = entry.isDirectory();
-      if (!isDir && entry.isSymbolicLink()) {
-        try {
-          isDir = fs.statSync(full).isDirectory();
-        } catch {
-          continue;
-        }
-      }
+      if (entry.isSymbolicLink()) continue;
+      const isDir = entry.isDirectory();
       if (isDir) {
         walk(full);
         continue;
@@ -280,7 +276,7 @@ async function writeBackupFile(selectedModules) {
   await writer.addBuffer('db.json', Buffer.from(JSON.stringify(buildSnapshot(modules))));
 
   if (modules.includes('files')) {
-    for (const row of statements.listFileLocations.all()) {
+    for (const row of db.prepare('SELECT * FROM file_locations ORDER BY id').all()) {
       const archiveDir = locationArchiveDir(row);
       for (const file of walkFiles(row.path)) {
         const relPosix = path.relative(row.path, file.full).split(path.sep).join('/');
@@ -345,11 +341,11 @@ async function restoreFromArchive(archivePath, selectedModules) {
       if (!appliedModules.includes('files')) return null;
       const parsed = parseFilesEntryName(name);
       if (!parsed) return null;
-      const location = statements.getFileLocation.get(parsed.locationId);
+      const location = db.prepare('SELECT * FROM file_locations WHERE id = ?').get(parsed.locationId);
       if (!location) return null;
       try {
         fs.mkdirSync(location.path, { recursive: true });
-        return resolveSafePath(location.path, parsed.relPath);
+        return resolveSafePath(location.path, parsed.relPath, { allowReserved: true });
       } catch {
         return null;
       }

@@ -1,0 +1,22 @@
+.bookmark-dashboard { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 0 0 24px; }
+.bookmark-widget { background: var(--surface-container-low); border-radius: 24px; padding: 20px; min-width: 0; }
+.bookmark-widget h3 { font-size: 16px; margin: 0 0 12px; font-weight: 550; }
+.bookmark-widget p { color: var(--on-surface-variant); font-size: 13px; line-height: 1.7; }
+.bookmark-widget a { display: block; padding: 7px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; text-decoration: none; }
+.bookmark-tag-filter { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.bookmark-tag-filter select { width: auto; min-height: 40px; border-radius: 20px; }
+.bookmark-metadata { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 12px; font-weight: 400; white-space: normal; }
+.bookmark-chip { border-radius: 12px; padding: 3px 8px; background: var(--secondary-container); color: var(--on-secondary-container); }
+.bookmark-note { flex-basis: 100%; color: var(--on-surface-variant); overflow-wrap: anywhere; }
+.bookmark-tools-modal { max-width: 760px; }
+.bookmark-tool-item { padding: 16px 0; border-bottom: 1px solid var(--outline-variant); overflow-wrap: anywhere; }
+.bookmark-tool-item h3 { font-size: 16px; margin: 0 0 8px; }
+.bookmark-tool-item p { color: var(--on-surface-variant); line-height: 1.6; }
+.bookmark-tool-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+#bookmark-tools-body label { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+#bookmark-tools-body input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); }
+#bookmark-tools-body .bookmark-check-label { flex-direction: row; align-items: center; }
+#bookmark-tools-body .bookmark-link-output { width: 100%; box-sizing: border-box; margin: 8px 0; }
+#bookmark-tools-body pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; border-radius: 16px; background: var(--surface-container-low); }
+#bookmark-tools-message { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .bookmark-dashboard { grid-template-columns: 1fr; } }

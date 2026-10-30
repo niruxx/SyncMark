@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SyncMark Vault</title><link rel="stylesheet" href="popup.css"></head>
+<body><header><h1>SyncMark Vault</h1><button id="lock" type="button" hidden>Lock</button></header>
+<form id="unlock"><label>SyncMark server<input id="server" type="url" required placeholder="https://sync.example.com" autocomplete="off"></label>
+<label>Read-only device credential<input id="token" type="password" required autocomplete="off"></label>
+<label class="check"><input id="remember" type="checkbox">Remember this device credential (not the vault key)</label>
+<label>Vault passphrase<input id="passphrase" type="password" required autocomplete="off"></label><button type="submit">Unlock locally</button></form>
+<p id="status" role="status">Create a credential in Passwords → Browser &amp; mobile access.</p><section id="items" hidden><h2 id="origin"></h2><p>Choose a matching login to fill. Forms are never submitted automatically.</p><div id="matches"></div></section>
+<button id="forget" type="button">Forget saved settings</button>
+<script src="vaultCrypto.js"></script><script src="vaultClient.js"></script><script src="popup.js"></script></body></html>

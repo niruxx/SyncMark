@@ -38,10 +38,24 @@ function assertRealPathContained(base, target) {
 
 // basePath: a location's configured absolute root. relativePath: an
 // (untrusted) path from the request, relative to that root.
-function resolveSafePath(basePath, relativePath) {
+function resolveSafePath(basePath, relativePath, { allowReserved = false } = {}) {
   const base = path.resolve(basePath);
   const target = path.resolve(base, relativePath || '.');
   assertContained(base, target, 'Path escapes the configured location');
+  const segments = path.relative(base, target).split(path.sep);
+  if (!allowReserved && segments.some((part) => ['.trash', '.syncmark'].includes(part.toLowerCase()))) {
+    throw new SafePathError('Reserved storage path');
+  }
+  // Reject links, including dangling links, rather than following them during writes.
+  let probe = base;
+  for (const segment of segments.filter(Boolean)) {
+    probe = path.join(probe, segment);
+    try {
+      if (fs.lstatSync(probe).isSymbolicLink()) throw new SafePathError('Symbolic links are not supported');
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+  }
   assertRealPathContained(base, target);
   return target;
 }

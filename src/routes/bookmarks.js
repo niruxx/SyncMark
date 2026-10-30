@@ -1,11 +1,12 @@
 const express = require('express');
-const { statements, ensureFolderAncestors, SORT_CLAUSES } = require('../db');
+const { db, statements, ensureFolderAncestors, SORT_CLAUSES } = require('../db');
+const library = require('../utils/bookmarkLibrary');
 const { normalizeFolderPath } = require('../utils/folderPath');
 const { toNetscapeHtml, toGenericJson } = require('../utils/exportBookmarks');
 
 const router = express.Router();
 
-const isValidUrl = (url) => /^https?:\/\/.+/i.test(url);
+const isValidUrl = library.validUrl;
 const DEFAULT_SORT = 'title-asc';
 
 router.get('/bookmarks', (req, res) => {
@@ -17,9 +18,9 @@ router.get('/bookmarks', (req, res) => {
 
   const rows = req.query.exact === '1'
     ? statements.listBookmarksExactFolderBySort[sort].all(params)
-    : statements.listBookmarksBySort[sort].all({ ...params, folderPrefix: `${folder}/%` });
+    : statements.listBookmarksBySort[sort].all({ ...params, folderPrefix: `${folder.replace(/[\\%_]/g, '\\$&')}/%` });
 
-  res.json(rows);
+  res.json(rows.filter((row) => !req.query.tag || library.tags(row.tags).includes(String(req.query.tag).toLowerCase())).map(library.rowView));
 });
 
 router.get('/export', (req, res) => {
@@ -45,18 +46,22 @@ router.post('/bookmarks', (req, res) => {
     return res.status(400).json({ error: 'URL must start with http:// or https://' });
   }
 
+  let tagList, noteText;
+  try { tagList = library.tags(req.body.tags || []); noteText = library.notes(req.body.notes || ''); }
+  catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
   const result = statements.insertBookmark.run({ userId: req.user.id, title, url, folder });
+  db.prepare('UPDATE bookmarks SET tags=?, notes=? WHERE id=? AND user_id=?').run(JSON.stringify(tagList), noteText, result.lastInsertRowid, req.user.id);
   if (req.body.favorite) {
     statements.setFavorite.run({ id: result.lastInsertRowid, userId: req.user.id, favorite: 1 });
   }
   ensureFolderAncestors(req.user.id, folder);
-  res.status(201).json(statements.getBookmark.get(result.lastInsertRowid, req.user.id));
+  res.status(201).json(library.rowView(statements.getBookmark.get(result.lastInsertRowid, req.user.id)));
 });
 
 router.get('/bookmarks/:id', (req, res) => {
   const row = statements.getBookmark.get(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'Bookmark not found' });
-  res.json(row);
+  res.json(library.rowView(row));
 });
 
 router.put('/bookmarks/:id/favorite', (req, res) => {
@@ -65,7 +70,7 @@ router.put('/bookmarks/:id/favorite', (req, res) => {
 
   const favorite = req.body.favorite ? 1 : 0;
   statements.setFavorite.run({ id: req.params.id, userId: req.user.id, favorite });
-  res.json(statements.getBookmark.get(req.params.id, req.user.id));
+  res.json(library.rowView(statements.getBookmark.get(req.params.id, req.user.id)));
 });
 
 // Drag-and-drop reordering (used with sort=custom). beforeId/afterId are the
@@ -89,7 +94,7 @@ router.put('/bookmarks/:id/reorder', (req, res) => {
   }
 
   statements.setPosition.run({ id: req.params.id, userId: req.user.id, position });
-  res.json(statements.getBookmark.get(req.params.id, req.user.id));
+  res.json(library.rowView(statements.getBookmark.get(req.params.id, req.user.id)));
 });
 
 router.put('/bookmarks/:id', (req, res) => {
@@ -108,9 +113,15 @@ router.put('/bookmarks/:id', (req, res) => {
     return res.status(400).json({ error: 'URL must start with http:// or https://' });
   }
 
-  statements.updateBookmark.run({ id: req.params.id, userId: req.user.id, title, url, folder, favorite });
+  let tagList, noteText;
+  try { tagList = library.tags(req.body.tags ?? existing.tags); noteText = library.notes(req.body.notes ?? existing.notes); }
+  catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  db.transaction(() => {
+    statements.updateBookmark.run({ id: req.params.id, userId: req.user.id, title, url, folder, favorite });
+    db.prepare('UPDATE bookmarks SET tags=?, notes=? WHERE id=? AND user_id=?').run(JSON.stringify(tagList), noteText, req.params.id, req.user.id);
+  })();
   ensureFolderAncestors(req.user.id, folder);
-  res.json(statements.getBookmark.get(req.params.id, req.user.id));
+  res.json(library.rowView(statements.getBookmark.get(req.params.id, req.user.id)));
 });
 
 router.delete('/bookmarks/all', (req, res) => {

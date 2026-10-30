@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "SyncMark Vault",
+  "version": "1.0.0",
+  "description": "Unlock locally and fill a chosen login on the active site's exact origin.",
+  "minimum_chrome_version": "112",
+  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "action": { "default_popup": "popup.html", "default_title": "SyncMark Vault" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}

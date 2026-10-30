@@ -53,7 +53,7 @@ function toNetscapeHtml(bookmarks) {
 
 function toGenericJson(bookmarks) {
   return JSON.stringify(
-    bookmarks.map((b) => ({ title: b.title, url: b.url, folder: b.folder })),
+    bookmarks.map((b) => ({ title: b.title, url: b.url, folder: b.folder, tags: JSON.parse(b.tags || '[]'), notes: b.notes || '', favorite: Boolean(b.favorite) })),
     null,
     2
   );

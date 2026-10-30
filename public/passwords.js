@@ -96,7 +96,7 @@ async function api(path, options) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    throw Object.assign(new Error(body.error || `Request failed: ${res.status}`), { status: res.status });
   }
   if (res.status === 204) return null;
   return res.json();
@@ -138,6 +138,10 @@ function showVaultOverlay(viewName) {
 
 function hideVaultOverlay() {
   els.vaultOverlay.classList.remove('is-open');
+  els.vaultOverlay.querySelectorAll('input[type="password"]').forEach((input) => { input.value = ''; });
+  document.getElementById('vault-recover-key-input').value = '';
+  document.getElementById('recovery-key-display').textContent = '';
+  document.getElementById('recovery-key-copy-btn').onclick = null;
 }
 
 async function initVault() {
@@ -157,6 +161,8 @@ async function initVault() {
 
 async function finishUnlock(unlockedDek) {
   dek = unlockedDek;
+  document.querySelectorAll('#vault-overlay input[type="password"], #vault-recover-key-input').forEach((input) => { input.value = ''; });
+  window.passwordTools.onUnlock();
   hideVaultOverlay();
   vaultUnlockedResolve();
 }
@@ -218,6 +224,7 @@ document.getElementById('vault-recover-form').addEventListener('submit', async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vaultSalt, wrappedDekPassphrase, wrappedDekPassphraseIv, recoverySalt, wrappedDekRecovery, wrappedDekRecoveryIv }),
     });
+    vaultKeysRow = { vaultSalt, wrappedDekPassphrase, wrappedDekPassphraseIv, recoverySalt, wrappedDekRecovery, wrappedDekRecoveryIv };
 
     showRecoveryKey(newRecoveryKey, async () => {
       await finishUnlock(recoveredDek);
@@ -321,6 +328,7 @@ async function migrateLegacyPasswords(newDek) {
 
 els.vaultLockBtn.addEventListener('click', () => {
   dek = null;
+  window.passwordTools.lock();
   location.reload();
 });
 
@@ -383,9 +391,14 @@ async function loadPasswords() {
   const params = new URLSearchParams();
   if (state.query) params.set('q', state.query);
   if (state.favoritesOnly) params.set('favorite', '1');
+  const folder = document.getElementById('password-folder-filter').value;
+  const tag = document.getElementById('password-tag-filter').value;
+  if (folder) params.set('folder', folder);
+  if (tag) params.set('tag', tag);
   params.set('sort', state.sort);
   state.passwords = await api(`/passwords?${params.toString()}`);
   renderPasswords();
+  window.passwordTools.refreshFilters();
 }
 
 function makeRevealCell(entry) {
@@ -414,7 +427,7 @@ function makeRevealCell(entry) {
   async function ensurePlainValue() {
     if (plainValue === null) {
       const { passwordEnc } = await api(`/passwords/${entry.id}/reveal`);
-      plainValue = await VaultCrypto.decryptField(passwordEnc, dek);
+      plainValue = await VaultCrypto.decryptFieldStrict(passwordEnc, dek);
     }
     return plainValue;
   }
@@ -486,6 +499,10 @@ function renderPasswords() {
     const siteTd = document.createElement('td');
     siteTd.dataset.label = 'Site';
     siteTd.textContent = entry.site_name;
+    const metadata = document.createElement('div');
+    metadata.className = 'password-row-subtext';
+    metadata.textContent = [entry.folder, ...JSON.parse(entry.tags || '[]')].filter(Boolean).join(' · ');
+    siteTd.appendChild(metadata);
     if (!isNote && entry.url) {
       const sub = document.createElement('div');
       sub.className = 'password-row-subtext';
@@ -526,7 +543,10 @@ function renderPasswords() {
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', () => deletePassword(entry));
 
-    actionsTd.append(starBtn, editBtn, deleteBtn);
+    const shareBtn = document.createElement('button');
+    shareBtn.type = 'button'; shareBtn.className = 'secondary'; shareBtn.textContent = 'Share';
+    shareBtn.addEventListener('click', () => window.passwordTools.share(entry));
+    actionsTd.append(starBtn, editBtn, deleteBtn, shareBtn);
     tr.appendChild(actionsTd);
 
     els.rows.appendChild(tr);
@@ -706,10 +726,11 @@ function renderAttachments(list) {
     li.className = 'attachment-row';
     li.innerHTML = `
       <span class="material-symbols-outlined">draft</span>
-      <span class="attachment-name">${att.filename}</span>
+      <span class="attachment-name"></span>
       <button type="button" class="icon-btn" title="Download"><span class="material-symbols-outlined">download</span></button>
       <button type="button" class="icon-btn" title="Delete"><span class="material-symbols-outlined">delete</span></button>
     `;
+    li.querySelector('.attachment-name').textContent = att.filename;
     const [downloadBtn, deleteBtn] = li.querySelectorAll('button');
     downloadBtn.addEventListener('click', () => downloadAttachment(att));
     deleteBtn.addEventListener('click', () => deleteAttachment(att));
@@ -794,6 +815,8 @@ async function openModal(mode, passwordId) {
     let entry;
     try {
       entry = await api(`/passwords/${passwordId}`);
+      entry.plainPassword = await VaultCrypto.decryptFieldStrict(entry.password_enc, dek);
+      entry.plainNotes = await VaultCrypto.decryptFieldStrict(entry.notes, dek);
     } catch (err) {
       showToast(`Failed to load: ${err.message}`, 'error');
       return;
@@ -802,9 +825,11 @@ async function openModal(mode, passwordId) {
     els.siteInput.value = entry.site_name || '';
     els.urlInput.value = entry.url || '';
     els.usernameInput.value = entry.username || '';
-    els.passwordInput.value = await VaultCrypto.decryptField(entry.password_enc, dek);
-    els.notesInput.value = await VaultCrypto.decryptField(entry.notes, dek);
+    els.passwordInput.value = entry.plainPassword;
+    els.notesInput.value = entry.plainNotes;
     els.favoriteInput.checked = Boolean(entry.favorite);
+    document.getElementById('password-folder-input').value = entry.folder || '';
+    document.getElementById('password-tags-input').value = JSON.parse(entry.tags || '[]').join(', ');
 
     els.attachmentsSection.hidden = false;
     els.attachmentsSaveHint.hidden = true;
@@ -818,6 +843,7 @@ async function openModal(mode, passwordId) {
   }
 
   els.modal.classList.add('is-open');
+  window.passwordTools.liveWarnings();
   els.siteInput.focus();
 }
 
@@ -853,6 +879,8 @@ els.modalForm.addEventListener('submit', async (e) => {
       notesEnc,
       favorite: els.favoriteInput.checked,
       kind: state.modalKind,
+      folder: document.getElementById('password-folder-input').value,
+      tags: document.getElementById('password-tags-input').value.split(',').map((tag) => tag.trim()).filter(Boolean),
     };
 
     if (state.modalMode === 'edit') {
@@ -925,8 +953,8 @@ els.exportCsvBtn.addEventListener('click', async () => {
         siteName: row.site_name,
         url: row.url,
         username: row.username,
-        password: await VaultCrypto.decryptField(row.password_enc, dek),
-        notes: await VaultCrypto.decryptField(row.notes, dek),
+        password: await VaultCrypto.decryptFieldStrict(row.password_enc, dek),
+        notes: await VaultCrypto.decryptFieldStrict(row.notes, dek),
         favorite: row.favorite,
       });
     }
@@ -1006,8 +1034,8 @@ async function importEncryptedBackup(text) {
 
   const entries = [];
   for (const row of backup.entries) {
-    const password = await VaultCrypto.decryptField(row.password_enc, originalDek);
-    const notes = await VaultCrypto.decryptField(row.notes, originalDek);
+    const password = await VaultCrypto.decryptFieldStrict(row.password_enc, originalDek);
+    const notes = await VaultCrypto.decryptFieldStrict(row.notes, originalDek);
     entries.push({
       siteName: row.site_name,
       url: row.url,
@@ -1017,6 +1045,8 @@ async function importEncryptedBackup(text) {
       favorite: row.favorite,
       kind: row.kind,
       matchRule: row.match_rule,
+      folder: row.folder || '',
+      tags: JSON.parse(row.tags || '[]'),
     });
   }
   return api('/passwords/import', {
@@ -1064,6 +1094,7 @@ async function loadAccountBadge() {
   }
 }
 
+window.passwordTools.init({ api, getKey: () => dek, refresh: loadPasswords, edit: (id) => openModal('edit', id) });
 (async function init() {
   loadAccountBadge();
   applyFeatureGate();

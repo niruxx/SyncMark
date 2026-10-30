@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="files-sync.css" />
   <link rel="stylesheet" href="workspace.css" />
   <script src="theme.js"></script>
 </head>
@@ -76,7 +77,18 @@
           <nav class="breadcrumb" id="breadcrumb" aria-label="Current folder"></nav>
           <button type="button" id="trash-empty-btn" class="danger" hidden>Empty trash</button>
           <span id="result-count"></span>
+          <button type="button" id="file-sync-btn" class="secondary"><span class="material-symbols-outlined" aria-hidden="true">sync</span>Sync devices</button>
         </div>
+        <div id="file-bulk-bar" class="toolbar" hidden aria-label="Selected file actions">
+          <span id="file-selected-count" role="status"></span>
+          <button type="button" class="secondary" id="file-select-all">Select all</button>
+          <button type="button" class="secondary" id="file-copy-selected">Copy</button>
+          <button type="button" class="secondary" id="file-move-selected">Move</button>
+          <button type="button" class="secondary" id="file-trash-selected">Move to trash</button>
+          <button type="button" class="secondary" id="file-clear-selected">Clear</button>
+        </div>
+        <p id="file-upload-status" role="status" hidden></p>
+        <button type="button" id="file-upload-cancel" class="secondary" hidden>Pause upload</button>
 
         <p class="settings-hint" id="trash-hint" hidden>
           Deleted items stay here until you restore or permanently delete them — nothing is purged automatically.
@@ -209,6 +221,37 @@
 
   </div>
 
+  <div class="modal-backdrop" id="file-transfer-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="file-transfer-heading">
+      <h2 id="file-transfer-heading">Move files</h2>
+      <form id="file-transfer-form">
+        <label>Destination location<select id="file-transfer-location" required></select></label>
+        <label>Destination folder<input id="file-transfer-path" value="." required placeholder="e.g. Documents/Projects" /></label>
+        <p class="settings-hint">Enter an existing folder relative to the selected location. Existing files are never replaced.</p>
+        <p id="file-transfer-error" class="modal-error" hidden></p>
+        <div class="modal-actions"><button type="button" class="secondary" data-close-file-modal>Cancel</button><button type="submit">Continue</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="file-versions-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="file-versions-heading">
+      <h2 id="file-versions-heading">Version history</h2>
+      <p class="settings-hint">Earlier contents are saved before overwrites through SyncMark. Changes made directly on the server are not tracked. History belongs to the file path.</p>
+      <div id="file-versions-list"></div>
+      <div class="modal-actions"><button type="button" class="secondary" data-close-file-modal>Close</button></div>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="file-sync-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="file-sync-heading">
+      <h2 id="file-sync-heading">Sync your devices</h2>
+      <label>WebDAV address<input id="file-sync-url" readonly /></label>
+      <p>Connect using your SyncMark username and password. Use HTTPS when connecting over a network.</p>
+      <p><strong>Desktop:</strong> choose WebDAV (vendor “other”) in rclone, then use bisync for a local offline folder. The repository includes <code>scripts/sync-files.js</code> for selective and scheduled sync with conflict copies.</p>
+      <p><strong>Mobile:</strong> use a WebDAV sync app with offline folders and camera-upload support. Configure the DCIM/camera folder as a one-way upload pair to a dedicated server folder; enable background access in your device settings.</p>
+      <p class="settings-hint">Sync and background uploads run in your chosen client. This browser page does not run a background mobile service. WebDAV supports conditional writes, but does not provide DAV locks or Nextcloud-specific client APIs.</p>
+      <div class="modal-actions"><button type="button" class="secondary" data-close-file-modal>Close</button><button type="button" id="file-sync-copy">Copy address</button></div>
+    </div>
+  </div>
   <script src="ui.js"></script>
   <script src="auth.js" data-next="files.js"></script>
 </body>

@@ -44,7 +44,7 @@ function firstLabel(list) {
 }
 
 function folderFromItem(item) {
-  if (item.folder) return item.folder;
+  if (typeof item.folder === 'string') return item.folder;
   return firstLabel(item.labels) || firstLabel(item.tags);
 }
 
@@ -167,6 +167,9 @@ function parseGenericArray(data) {
       title: item.title || item.name || item.url || item.href,
       url: item.url || item.href,
       folder: folderFromItem(item),
+        tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string') : [],
+        notes: typeof item.notes === 'string' ? item.notes : '',
+        favorite: Boolean(item.favorite),
     }));
 }
 

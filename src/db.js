@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const dataDir = path.join(__dirname, '..', 'data');
+const dataDir = process.env.SYNCMARK_DATA_DIR ? path.resolve(process.env.SYNCMARK_DATA_DIR) : path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -213,6 +213,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_password_attachments_password ON password_attachments(password_id);
 `);
 
+
 // ---------- Migrations for databases created before these columns/shapes existed ----------
 
 const existingColumns = db.prepare('PRAGMA table_info(bookmarks)').all();
@@ -353,6 +354,77 @@ rebuildWithUserId('folders', ['id', 'name', 'position', 'created_at']);
 rebuildWithUserId('contact_groups', ['id', 'name', 'type', 'smart_rules', 'position', 'created_at']);
 rebuildWithUserId('file_locations', ['id', 'name', 'path', 'created_at']);
 
+// Additive bookmark migrations preserve existing libraries and imports.
+for (const [name, type] of Object.entries({
+  tags: "TEXT NOT NULL DEFAULT '[]'", notes: "TEXT NOT NULL DEFAULT ''",
+  archive_text: "TEXT NOT NULL DEFAULT ''", archived_at: 'TEXT',
+  check_status: 'TEXT', checked_at: 'TEXT', visit_count: 'INTEGER NOT NULL DEFAULT 0',
+  last_visited_at: 'TEXT', sync_id: 'INTEGER',
+})) {
+  if (!db.prepare('PRAGMA table_info(bookmarks)').all().some((col) => col.name === name)) db.exec(`ALTER TABLE bookmarks ADD COLUMN ${name} ${type}`);
+}
+if (!db.prepare('PRAGMA table_info(folders)').all().some((col) => col.name === 'sync_id')) db.exec('ALTER TABLE folders ADD COLUMN sync_id INTEGER');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS bookmark_groups (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER NOT NULL, name TEXT NOT NULL, UNIQUE(owner_id, name));
+  CREATE TABLE IF NOT EXISTS bookmark_group_members (group_id INTEGER NOT NULL, user_id INTEGER NOT NULL, PRIMARY KEY(group_id, user_id));
+  CREATE TABLE IF NOT EXISTS bookmark_shares (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER NOT NULL, folder TEXT NOT NULL,
+    title TEXT NOT NULL, token_hash TEXT UNIQUE, password_hash TEXT, expires_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS bookmark_share_grants (share_id INTEGER NOT NULL, user_id INTEGER, group_id INTEGER);
+  CREATE TABLE IF NOT EXISTS bookmark_share_sessions (token_hash TEXT PRIMARY KEY, share_id INTEGER NOT NULL, expires_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS bookmark_sync (
+    user_id INTEGER PRIMARY KEY, highest_id INTEGER NOT NULL DEFAULT 0,
+    lock_owner TEXT, lock_at INTEGER, baseline TEXT, committed_hash TEXT, staged TEXT
+  );
+  CREATE TRIGGER IF NOT EXISTS bookmark_url_changed AFTER UPDATE OF url ON bookmarks WHEN OLD.url != NEW.url BEGIN
+    UPDATE bookmarks SET archive_text='', archived_at=NULL, check_status=NULL, checked_at=NULL WHERE id=NEW.id;
+  END;
+  CREATE TRIGGER IF NOT EXISTS bookmark_share_deleted AFTER DELETE ON bookmark_shares BEGIN
+    DELETE FROM bookmark_share_grants WHERE share_id=OLD.id;
+    DELETE FROM bookmark_share_sessions WHERE share_id=OLD.id;
+  END;
+  CREATE TRIGGER IF NOT EXISTS bookmark_group_deleted AFTER DELETE ON bookmark_groups BEGIN
+    DELETE FROM bookmark_group_members WHERE group_id=OLD.id;
+    DELETE FROM bookmark_share_grants WHERE group_id=OLD.id;
+  END;
+  DROP TRIGGER IF EXISTS bookmark_owner_deleted;
+`);
+
+for (const name of ['exported_xml', 'exported_revision']) {
+  if (!db.prepare('PRAGMA table_info(bookmark_sync)').all().some((column) => column.name === name)) db.exec(`ALTER TABLE bookmark_sync ADD COLUMN ${name} TEXT`);
+}
+
+// Password organization and encrypted sharing are additive vault migrations.
+for (const [name, type] of Object.entries({ folder: "TEXT NOT NULL DEFAULT ''", tags: "TEXT NOT NULL DEFAULT '[]'" })) {
+  if (!db.prepare('PRAGMA table_info(passwords)').all().some((column) => column.name === name)) db.exec(`ALTER TABLE passwords ADD COLUMN ${name} ${type}`);
+}
+db.exec(`
+  CREATE TABLE IF NOT EXISTS password_folders (user_id INTEGER NOT NULL, name TEXT NOT NULL, PRIMARY KEY(user_id,name));
+  CREATE TABLE IF NOT EXISTS password_sharing_keys (user_id INTEGER PRIMARY KEY, public_key TEXT NOT NULL, private_enc TEXT NOT NULL, fingerprint TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS password_shares (
+    id TEXT PRIMARY KEY, sender_id INTEGER NOT NULL, recipient_id INTEGER NOT NULL, password_id INTEGER NOT NULL,
+    wrapped_key TEXT NOT NULL, payload TEXT NOT NULL, recipient_fingerprint TEXT NOT NULL,
+    expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS password_clients (
+    id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT
+  );
+  CREATE TRIGGER IF NOT EXISTS password_share_source_deleted AFTER DELETE ON passwords BEGIN
+    DELETE FROM password_shares WHERE password_id=OLD.id AND sender_id=OLD.user_id;
+  END;
+  CREATE TRIGGER IF NOT EXISTS password_client_login_changed AFTER UPDATE OF password_hash ON users
+  WHEN OLD.password_hash!=NEW.password_hash BEGIN
+    DELETE FROM password_clients WHERE user_id=NEW.id;
+  END;
+  CREATE TRIGGER IF NOT EXISTS password_share_source_changed AFTER UPDATE OF password_enc,notes ON passwords
+  WHEN OLD.password_enc!=NEW.password_enc OR OLD.notes!=NEW.notes BEGIN
+    DELETE FROM password_shares WHERE password_id=NEW.id AND sender_id=NEW.user_id;
+  END;
+`);
+
 // contacts_seq/events_seq/contacts_dismissed_duplicates used to be single
 // global app_settings keys; they're namespaced per-user now (see
 // nextContactsSeq etc. below). Carry the pre-existing account's counters
@@ -383,15 +455,15 @@ for (const [key, clause] of Object.entries(SORT_CLAUSES)) {
   listBookmarksBySort[key] = db.prepare(`
     SELECT * FROM bookmarks
     WHERE user_id = @userId
-      AND (@q = '' OR title LIKE @qLike OR url LIKE @qLike)
-      AND (@folder = '' OR folder = @folder OR folder LIKE @folderPrefix)
+      AND (@q = '' OR title LIKE @qLike OR url LIKE @qLike OR notes LIKE @qLike OR tags LIKE @qLike OR archive_text LIKE @qLike)
+      AND (@folder = '' OR folder = @folder OR folder LIKE @folderPrefix ESCAPE '\\')
       AND (@favorite = 0 OR favorite = 1)
     ORDER BY ${clause}
   `);
   listBookmarksExactFolderBySort[key] = db.prepare(`
     SELECT * FROM bookmarks
     WHERE user_id = @userId
-      AND (@q = '' OR title LIKE @qLike OR url LIKE @qLike)
+      AND (@q = '' OR title LIKE @qLike OR url LIKE @qLike OR notes LIKE @qLike OR tags LIKE @qLike OR archive_text LIKE @qLike)
       AND folder = @folder
       AND (@favorite = 0 OR favorite = 1)
     ORDER BY ${clause}
@@ -437,10 +509,10 @@ const PASSWORD_SORT_CLAUSES = {
 const listPasswordsBySort = {};
 for (const [key, clause] of Object.entries(PASSWORD_SORT_CLAUSES)) {
   listPasswordsBySort[key] = db.prepare(`
-    SELECT id, site_name, url, username, favorite, kind, match_rule, created_at, updated_at
+    SELECT id, site_name, url, username, favorite, kind, match_rule, folder, tags, created_at, updated_at
     FROM passwords
     WHERE user_id = @userId
-      AND (@q = '' OR site_name LIKE @qLike OR url LIKE @qLike OR username LIKE @qLike)
+      AND (@q = '' OR site_name LIKE @qLike OR url LIKE @qLike OR username LIKE @qLike OR folder LIKE @qLike OR tags LIKE @qLike)
       AND (@favorite = 0 OR favorite = 1)
     ORDER BY ${clause}
   `);
@@ -487,24 +559,24 @@ const statements = {
   setFolderPosition: db.prepare('UPDATE folders SET position = @position WHERE name = @name AND user_id = @userId'),
 
   deleteFolderExact: db.prepare('DELETE FROM folders WHERE name = @name AND user_id = @userId'),
-  deleteFolderDescendants: db.prepare('DELETE FROM folders WHERE name LIKE @prefix AND user_id = @userId'),
+  deleteFolderDescendants: db.prepare("DELETE FROM folders WHERE name LIKE @prefix ESCAPE '\\' AND user_id = @userId"),
   unassignBookmarksExact: db.prepare(
     `UPDATE bookmarks SET folder = '', updated_at = datetime('now') WHERE folder = @name AND user_id = @userId`
   ),
   unassignBookmarksDescendants: db.prepare(
-    `UPDATE bookmarks SET folder = '', updated_at = datetime('now') WHERE folder LIKE @prefix AND user_id = @userId`
+    `UPDATE bookmarks SET folder = '', updated_at = datetime('now') WHERE folder LIKE @prefix ESCAPE '\\' AND user_id = @userId`
   ),
 
   renameFolderExact: db.prepare('UPDATE folders SET name = @newName WHERE name = @oldName AND user_id = @userId'),
   renameFolderDescendants: db.prepare(
-    `UPDATE folders SET name = @newName || substr(name, @oldLen + 1) WHERE name LIKE @prefix AND user_id = @userId`
+    `UPDATE folders SET name = @newName || substr(name, @oldLen + 1) WHERE name LIKE @prefix ESCAPE '\\' AND user_id = @userId`
   ),
   renameBookmarksExact: db.prepare(
     `UPDATE bookmarks SET folder = @newName, updated_at = datetime('now') WHERE folder = @oldName AND user_id = @userId`
   ),
   renameBookmarksDescendants: db.prepare(
     `UPDATE bookmarks SET folder = @newName || substr(folder, @oldLen + 1), updated_at = datetime('now')
-     WHERE folder LIKE @prefix AND user_id = @userId`
+     WHERE folder LIKE @prefix ESCAPE '\\' AND user_id = @userId`
   ),
 
   countUsers: db.prepare('SELECT COUNT(*) as count FROM users'),
@@ -761,19 +833,24 @@ function ensureFolderAncestors(userId, folderPath) {
 const insertManyBookmarks = db.transaction((userId, bookmarks) => {
   for (const bookmark of bookmarks) {
     const folder = bookmark.folder || '';
-    statements.insertBookmark.run({
+    const inserted = statements.insertBookmark.run({
       userId,
       title: bookmark.title || bookmark.url,
       url: bookmark.url,
       folder,
     });
+    const tags = [...new Set((Array.isArray(bookmark.tags) ? bookmark.tags : []).filter((tag) => typeof tag === 'string').map((tag) => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 30).map((tag) => tag.slice(0, 60));
+    db.prepare('UPDATE bookmarks SET tags=?, notes=?, favorite=? WHERE id=? AND user_id=?').run(JSON.stringify(tags), String(bookmark.notes || '').slice(0, 20000), bookmark.favorite ? 1 : 0, inserted.lastInsertRowid, userId);
     ensureFolderAncestors(userId, folder);
   }
   return bookmarks.length;
 });
 
 const deleteFolder = db.transaction((userId, name) => {
-  const prefix = `${name}/%`;
+  for (const share of db.prepare('SELECT id,folder FROM bookmark_shares WHERE owner_id=?').all(userId)) {
+    if (share.folder === name || share.folder.startsWith(name + '/')) db.prepare('DELETE FROM bookmark_shares WHERE id=?').run(share.id);
+  }
+  const prefix = `${name.replace(/[\\%_]/g, '\\$&')}/%`;
   statements.unassignBookmarksExact.run({ name, userId });
   statements.unassignBookmarksDescendants.run({ prefix, userId });
   statements.deleteFolderExact.run({ name, userId });
@@ -781,7 +858,10 @@ const deleteFolder = db.transaction((userId, name) => {
 });
 
 const renameFolder = db.transaction((userId, oldName, newName) => {
-  const prefix = `${oldName}/%`;
+  for (const share of db.prepare('SELECT id,folder FROM bookmark_shares WHERE owner_id=?').all(userId)) {
+    if (share.folder === oldName || share.folder.startsWith(oldName + '/')) db.prepare('UPDATE bookmark_shares SET folder=? WHERE id=?').run(newName + share.folder.slice(oldName.length), share.id);
+  }
+  const prefix = `${oldName.replace(/[\\%_]/g, '\\$&')}/%`;
   const oldLen = oldName.length;
   statements.renameBookmarksExact.run({ oldName, newName, userId });
   statements.renameBookmarksDescendants.run({ prefix, newName, oldLen, userId });
@@ -795,6 +875,15 @@ const renameFolder = db.transaction((userId, oldName, newName) => {
 // Group memberships are cleared before their owning contacts/groups so
 // nothing references an id that's about to stop existing.
 const wipeUserData = db.transaction((userId) => {
+  db.prepare('DELETE FROM password_shares WHERE sender_id=? OR recipient_id=?').run(userId, userId);
+  db.prepare('DELETE FROM password_sharing_keys WHERE user_id=?').run(userId);
+  db.prepare('DELETE FROM password_folders WHERE user_id=?').run(userId);
+  db.prepare('DELETE FROM password_clients WHERE user_id=?').run(userId);
+  db.prepare('DELETE FROM bookmark_shares WHERE owner_id=?').run(userId);
+  db.prepare('DELETE FROM bookmark_share_grants WHERE user_id=?').run(userId);
+  db.prepare('DELETE FROM bookmark_groups WHERE owner_id=?').run(userId);
+  db.prepare('DELETE FROM bookmark_group_members WHERE user_id=?').run(userId);
+  db.prepare('DELETE FROM bookmark_sync WHERE user_id=?').run(userId);
   db.prepare('DELETE FROM contact_group_members WHERE contact_id IN (SELECT id FROM contacts WHERE user_id = ?)').run(userId);
   db.prepare('DELETE FROM contact_group_members WHERE group_id IN (SELECT id FROM contact_groups WHERE user_id = ?)').run(userId);
   statements.deleteAllBookmarks.run(userId);
@@ -828,6 +917,16 @@ const wipeUserData = db.transaction((userId) => {
 // data/backups, are never touched by this.
 const wipeDatabase = db.transaction(() => {
   db.exec(`
+    DELETE FROM password_shares;
+    DELETE FROM password_sharing_keys;
+    DELETE FROM password_folders;
+    DELETE FROM password_clients;
+    DELETE FROM bookmark_shares;
+    DELETE FROM bookmark_share_grants;
+    DELETE FROM bookmark_share_sessions;
+    DELETE FROM bookmark_groups;
+    DELETE FROM bookmark_group_members;
+    DELETE FROM bookmark_sync;
     DELETE FROM bookmarks;
     DELETE FROM folders;
     DELETE FROM contacts;

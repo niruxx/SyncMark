@@ -5,8 +5,19 @@ const express = require('express');
 const multer = require('multer');
 const { statements } = require('../db');
 const { resolveSafePath, sanitizeName } = require('../utils/fsPath');
+const store = require('../utils/fileStore');
 
 const router = express.Router();
+
+// Legacy synchronous mutations must not race a streamed DAV/chunked write.
+router.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || ['/files/text', '/files/upload'].includes(req.path)) return next();
+  try {
+    const location = getLocationOrNull(req.query.location || req.body?.location || req.params.id, req.user.id);
+    if (location && store.isBusy(location)) return res.status(423).json({ error: 'Location is busy; retry shortly' });
+    next();
+  } catch (err) { next(err); }
+});
 
 function getLocationOrNull(id, userId) {
   return id ? statements.getFileLocation.get(id, userId) : null;
@@ -188,7 +199,7 @@ router.get('/files/browse', (req, res) => {
 
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.name !== '.trash')
+    .filter((entry) => !['.trash', '.syncmark'].includes(entry.name.toLowerCase()) && !entry.isSymbolicLink())
     .map((entry) => {
       let stat;
       try {
@@ -201,6 +212,7 @@ router.get('/files/browse', (req, res) => {
         type: entry.isDirectory() ? 'dir' : 'file',
         size: stat.size,
         modifiedAt: stat.mtime.toISOString(),
+        etag: store.etag(path.join(dir, entry.name)),
       };
     })
     .filter(Boolean);
@@ -298,7 +310,7 @@ router.get('/files/text', (req, res) => {
   }
 
   try {
-    res.json({ content: fs.readFileSync(target, 'utf8') });
+    res.json({ content: fs.readFileSync(target, 'utf8'), etag: store.etag(target) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -309,7 +321,7 @@ router.get('/files/text', (req, res) => {
 // in server.js is far smaller than a text file can reasonably be — same
 // "scope the parser, don't touch the global default" precedent
 // carddav.js/caldav.js already set for their own body parsing.
-router.put('/files/text', express.text({ type: 'text/plain', limit: '6mb' }), (req, res) => {
+router.put('/files/text', express.text({ type: 'text/plain', limit: '6mb' }), async (req, res) => {
   const location = getLocationOrNull(req.query.location, req.user.id);
   if (!location) return res.status(404).json({ error: 'Location not found' });
 
@@ -330,11 +342,17 @@ router.put('/files/text', express.text({ type: 'text/plain', limit: '6mb' }), (r
   }
 
   try {
-    fs.writeFileSync(target, content, 'utf8');
+    await store.locked([location], async () => {
+      const staged = store.stagePath(location);
+      try {
+        fs.writeFileSync(staged, content, 'utf8');
+        store.commit(location, target, staged, req.headers['if-match']);
+      } finally { fs.rmSync(staged, { force: true }); }
+    });
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    return res.status(err.status || 400).json({ error: err.message });
   }
-  res.json({ ok: true });
+  res.json({ ok: true, etag: store.etag(target) });
 });
 
 // ---------- permissions ----------
@@ -404,7 +422,7 @@ const upload = multer({
         if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
           return cb(new Error('Destination folder not found'));
         }
-        cb(null, dir);
+        cb(null, store.metadataDir(location, 'staging'));
       } catch (err) {
         cb(err);
       }
@@ -415,11 +433,14 @@ const upload = multer({
         const dir = resolveSafePath(location.path, req.query.path || '.');
         const name = sanitizeName(file.originalname);
         if (!name) return cb(new Error('Invalid filename'));
-        if (name === '.trash' && dir === path.resolve(location.path)) return cb(new Error('RESERVED'));
-        if (req.query.overwrite !== '1' && fs.existsSync(path.join(dir, name))) {
+        const target = resolveSafePath(location.path, path.join(req.query.path || '.', name));
+        if (req.query.overwrite !== '1' && fs.existsSync(target)) {
           return cb(new Error('EEXIST'));
         }
-        cb(null, name);
+        req.uploadTargets ||= new Map();
+        const key = crypto.randomUUID();
+        req.uploadTargets.set(key, { target, expected: store.etag(target) });
+        cb(null, key);
       } catch (err) {
         cb(err);
       }
@@ -427,15 +448,23 @@ const upload = multer({
   }),
 });
 
-router.post('/files/upload', (req, res) => {
-  upload.array('files')(req, res, (err) => {
-    if (err) {
-      if (err.message === 'EEXIST') return res.status(409).json({ error: 'A file with that name already exists' });
-      if (err.message === 'RESERVED') return res.status(409).json({ error: '".trash" is a reserved name at a location\'s root' });
-      return res.status(400).json({ error: err.message || 'Upload failed' });
-    }
+router.post('/files/upload', async (req, res) => {
+  try {
+    const location = getLocationOrNull(req.query.location, req.user.id);
+    if (!location) return res.status(404).json({ error: 'Location not found' });
+    await store.locked([location], async () => {
+      await new Promise((resolve, reject) => upload.array('files')(req, res, (err) => err ? reject(err) : resolve()));
+      for (const file of req.files || []) {
+        const { target, expected } = req.uploadTargets.get(file.filename);
+        store.commit(location, target, file.path, expected);
+      }
+    });
     res.status(201).json({ uploaded: (req.files || []).length });
-  });
+  } catch (err) {
+    res.status(err.status || (err.message === 'EEXIST' ? 409 : 400)).json({ error: err.message });
+  } finally {
+    for (const file of req.files || []) fs.rmSync(file.path, { force: true });
+  }
 });
 
 // ---------- mkdir / rename / delete ----------

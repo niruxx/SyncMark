@@ -104,6 +104,14 @@
     }
   }
 
+  async function decryptFieldStrict(payload, dek) {
+    if (!payload) return '';
+    const parts = String(payload).split(':');
+    if (parts.length !== 2 || fromB64(parts[0]).length !== IV_BYTES) throw new Error('Invalid encrypted field');
+    const plain = await crypto.subtle.decrypt({ name: AES_ALG, iv: fromB64(parts[0]) }, dek, fromB64(parts[1]));
+    return new TextDecoder().decode(plain);
+  }
+
   // Same idea, for raw bytes (attachments) rather than a text field.
   async function encryptBytes(bytes, dek) {
     const iv = randomBytes(IV_BYTES);
@@ -151,6 +159,7 @@
     unwrapDek,
     encryptField,
     decryptField,
+    decryptFieldStrict,
     encryptBytes,
     decryptBytes,
     generateRecoveryKey,

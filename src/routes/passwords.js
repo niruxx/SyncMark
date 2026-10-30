@@ -6,7 +6,8 @@
 // src/routes/vault.js's one-time legacy-data bridge for pre-existing accounts.
 const express = require('express');
 const multer = require('multer');
-const { statements } = require('../db');
+const { db, statements } = require('../db');
+const metadata = require('../utils/passwordMetadata');
 
 const router = express.Router();
 
@@ -15,6 +16,10 @@ const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const attachmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: ATTACHMENT_MAX_BYTES } });
 
 function fieldsFromBody(userId, body, existing) {
+  for (const [key, max] of [['siteName', 500], ['url', 4096], ['username', 500], ['passwordEnc', 100000], ['notesEnc', 500000]]) {
+    if (body[key] !== undefined && (typeof body[key] !== 'string' || body[key].length > max)) metadata.fail(400, `Invalid ${key}`);
+  }
+  for (const key of ['passwordEnc', 'notesEnc']) if (body[key] && !metadata.encryptedField(body[key], key === 'notesEnc' ? 500000 : 100000)) metadata.fail(400, `${key} must contain encrypted vault data`);
   const siteName = (body.siteName ?? existing?.site_name ?? '').trim();
   const kind = body.kind !== undefined ? (body.kind === 'note' ? 'note' : 'login') : (existing?.kind || 'login');
 
@@ -41,7 +46,9 @@ router.get('/passwords', (req, res) => {
   const qLike = q ? `%${q}%` : '';
   const favorite = req.query.favorite === '1' ? 1 : 0;
   const sort = statements.listPasswordsBySort[req.query.sort] ? req.query.sort : DEFAULT_SORT;
-  res.json(statements.listPasswordsBySort[sort].all({ userId: req.user.id, q, qLike, favorite }));
+  const folder = typeof req.query.folder === 'string' ? metadata.folder(req.query.folder) : '';
+  const tag = typeof req.query.tag === 'string' ? req.query.tag.toLowerCase() : '';
+  res.json(statements.listPasswordsBySort[sort].all({ userId: req.user.id, q, qLike, favorite }).filter((row) => (!folder || row.folder === folder || row.folder.startsWith(folder + '/')) && (!tag || metadata.tags(row.tags).includes(tag))));
 });
 
 // Bulk ciphertext dump for client-side CSV export and encrypted JSON backup —
@@ -58,26 +65,15 @@ router.post('/passwords/import', (req, res) => {
   const entries = Array.isArray(req.body.entries) ? req.body.entries : null;
   if (!entries || entries.length === 0) return res.status(422).json({ error: 'No password entries found in the uploaded file' });
 
-  let imported = 0;
-  for (const entry of entries) {
-    statements.insertPassword.run({
-      userId: req.user.id,
-      siteName: entry.siteName || 'Untitled',
-      url: entry.url || '',
-      username: entry.username || '',
-      passwordEnc: entry.passwordEnc || '',
-      notes: entry.notesEnc || '',
-      favorite: entry.favorite ? 1 : 0,
-      // CSV import never carries a kind (it's login-only by nature), but a
-      // restored encrypted-JSON backup does — preserve it so a "secure note"
-      // doesn't come back as a login entry with an empty password.
-      kind: entry.kind === 'note' ? 'note' : 'login',
-      matchRule: entry.matchRule || null,
-    });
-    imported += 1;
-  }
-
-  res.json({ imported });
+  if (entries.length > 10000) return res.status(400).json({ error: 'Import at most 10,000 entries at a time' });
+  db.transaction(() => {
+    for (const entry of entries) {
+      const fields = fieldsFromBody(req.user.id, { ...entry, siteName: entry.siteName || 'Untitled' });
+      const result = statements.insertPassword.run(fields);
+      metadata.save(req.user.id, result.lastInsertRowid, entry);
+    }
+  })();
+  res.json({ imported: entries.length });
 });
 
 router.get('/passwords/:id', (req, res) => {
@@ -98,7 +94,11 @@ router.post('/passwords', (req, res) => {
   const fields = fieldsFromBody(req.user.id, req.body, null);
   if (!fields.siteName) return res.status(400).json({ error: 'Site name is required' });
 
-  const result = statements.insertPassword.run(fields);
+  const result = db.transaction(() => {
+    const inserted = statements.insertPassword.run(fields);
+    metadata.save(req.user.id, inserted.lastInsertRowid, req.body);
+    return inserted;
+  })();
   const row = statements.getPassword.get(result.lastInsertRowid, req.user.id);
   res.status(201).json(row);
 });
@@ -110,7 +110,10 @@ router.put('/passwords/:id', (req, res) => {
   const fields = fieldsFromBody(req.user.id, req.body, existing);
   if (!fields.siteName) return res.status(400).json({ error: 'Site name is required' });
 
-  statements.updatePassword.run({ ...fields, id: existing.id });
+  db.transaction(() => {
+    statements.updatePassword.run({ ...fields, id: existing.id });
+    metadata.save(req.user.id, existing.id, req.body, existing);
+  })();
   const row = statements.getPassword.get(existing.id, req.user.id);
   res.json(row);
 });

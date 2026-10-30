@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { insertManyBookmarks } = require('../db');
+const { validUrl } = require('../utils/bookmarkLibrary');
 const { parseNetscapeHtml } = require('../parsers/netscapeHtml');
 const { parseHtmlListFormat } = require('../parsers/htmlListFormat');
 const { parseJsonBookmarks } = require('../parsers/json');
@@ -41,7 +42,7 @@ router.post('/import', upload.single('file'), (req, res) => {
 
   const text = req.file.buffer.toString('utf8');
   const bookmarks = detectAndParse(text);
-  const valid = bookmarks.filter((b) => b.url && /^https?:\/\//i.test(b.url));
+  const valid = bookmarks.filter((b) => typeof b.url === 'string' && validUrl(b.url));
 
   if (valid.length === 0) {
     return res.status(422).json({ error: 'No bookmarks found in the uploaded file' });

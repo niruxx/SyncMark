@@ -32,6 +32,23 @@ A self-hosted bookmark manager. Import bookmark exports from your browser, or fr
 
 ## Features
 
+- **Password vault tools:** folders/tags, local security checks, encrypted
+  recipient sharing, revocable read-only device credentials, a buildable browser
+  autofill extension, and a mobile web vault with optional encrypted offline
+  storage. See [Password vault tools and clients](docs/password-vault.md) for
+  setup, key verification, and client limitations.
+
+- **Bookmark library tools:** tags and private notes, duplicate merging, link
+  health checks, searchable readable page captures, read-only user/group/public
+  collection sharing, RSS feeds, Floccus XBEL browser-sync integration, and
+  recent/frequent visit widgets. See [Bookmark library tools](docs/bookmarks.md)
+  for setup, sharing scope, and sync/capture limitations.
+
+- **File sync and recovery:** generic WebDAV, a selective desktop sync helper,
+  mobile WebDAV client setup, version snapshots and restore, bulk move/copy,
+  and resumable browser uploads. See [File synchronization and recovery](docs/file-sync.md)
+  for setup, API details, and supported-client limitations.
+
 - Material Design 3 interface in the Google Photos idiom: tonal surfaces, pill-shaped nav and buttons, a prominent rounded search bar in the app bar, Material Symbols icons, elevation instead of borders, and Roboto throughout — plus deliberately-paced animated transitions between pages (via the CSS View Transitions API where supported, with an equivalent hand-rolled fade for browsers without it, e.g. Firefox)
 - Material 3 Expressive UI — spring motion, shape-morphing buttons and toggles, Roboto Flex type — with dark and light themes on the same tonal palette (dark by default; flip it from the sun/moon button in the top bar or the sign-in screen, or in Settings → Appearance)
 - A subtle, slow-drifting animated gradient behind the app (off automatically for anyone with reduced-motion preferences set) — only ever shown once you're signed in, never behind the sign-in/register screen

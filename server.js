@@ -3,12 +3,18 @@ const express = require('express');
 
 const authRouter = require('./src/routes/auth');
 const bookmarksRouter = require('./src/routes/bookmarks');
+const bookmarkToolsRouter = require('./src/routes/bookmarkTools');
+const bookmarkShares = require('./src/routes/bookmarkShares');
+const bookmarkSync = require('./src/routes/bookmarkSync');
 const importRouter = require('./src/routes/import');
 const foldersRouter = require('./src/routes/folders');
 const contactsRouter = require('./src/routes/contacts');
 const eventsRouter = require('./src/routes/events');
 const filesRouter = require('./src/routes/files');
+const fileSyncRouter = require('./src/routes/fileSync');
+const webdavRouter = require('./src/routes/webdav');
 const passwordsRouter = require('./src/routes/passwords');
+const passwordExtras = require('./src/routes/passwordExtras');
 const vaultRouter = require('./src/routes/vault');
 const featuresRouter = require('./src/routes/features');
 const backupsRouter = require('./src/routes/backups');
@@ -28,6 +34,8 @@ const app = express();
 // so they can parse PROPFIND/REPORT XML and vCard/iCal PUT bodies themselves.
 // carddavRouter owns the shared /dav/ and /dav/principals discovery routes
 // (see the notes in src/routes/carddav.js), so it's mounted first.
+app.use(webdavRouter);
+app.use(bookmarkSync.router);
 app.use(carddavRouter);
 app.use(caldavRouter);
 
@@ -35,14 +43,21 @@ app.use(caldavRouter);
 // sending — see src/routes/passwords.js), so the default 100kb body limit is
 // raised to match the old multipart CSV upload's 25MB cap.
 app.use(express.json({ limit: '25mb' }));
+app.use(passwordExtras.clientRouter);
+app.use(bookmarkShares.publicRouter);
 app.use('/api', authRouter);
 app.use('/api', requireAuth, featuresRouter);
-app.use('/api', requireAuth, gateRouter('bookmarks', bookmarksRouter));
-app.use('/api', requireAuth, gateRouter('bookmarks', importRouter));
-app.use('/api', requireAuth, gateRouter('bookmarks', foldersRouter));
+app.use('/api', requireAuth, gateRouter('bookmarks', bookmarkToolsRouter));
+app.use('/api', requireAuth, gateRouter('bookmarks', bookmarkShares.router));
+const bookmarkWrites = express.Router();
+bookmarkWrites.use(bookmarkSync.guard);
+bookmarkWrites.use(bookmarksRouter, importRouter, foldersRouter);
+app.use('/api', requireAuth, gateRouter('bookmarks', bookmarkWrites));
 app.use('/api', requireAuth, gateRouter('contacts', contactsRouter));
 app.use('/api', requireAuth, gateRouter('calendar', eventsRouter));
 app.use('/api', requireAuth, gateRouter('files', filesRouter));
+app.use('/api', requireAuth, gateRouter('files', fileSyncRouter));
+app.use('/api', requireAuth, gateRouter('passwords', passwordExtras.router));
 app.use('/api', requireAuth, gateRouter('passwords', passwordsRouter));
 app.use('/api', requireAuth, gateRouter('passwords', vaultRouter));
 app.use('/api', requireAuth, gateAdmin(backupsRouter));

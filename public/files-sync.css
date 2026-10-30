@@ -1,0 +1,9 @@
+.file-selection { width: 18px; height: 18px; margin: 0 12px 0 0; accent-color: var(--primary); vertical-align: middle; cursor: pointer; }
+.file-table th:first-child, .file-table td:first-child { width: 76px; white-space: nowrap; }
+.file-table th:last-child, .file-table td:last-child { width: 12rem; }
+#file-bulk-bar { background: var(--primary-container); color: var(--on-primary-container); border-radius: 20px; padding: 12px 16px; margin-bottom: 16px; }
+#file-bulk-bar button { min-height: 44px; }
+.file-version-row { padding: 12px 0; border-bottom: 1px solid var(--outline-variant); display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.file-version-row p { flex-basis: 100%; margin: 0; }
+#file-upload-status { background: var(--surface-container-low); padding: 16px; border-radius: 16px; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .file-table td:first-child, .file-table td:last-child { width: auto; } }

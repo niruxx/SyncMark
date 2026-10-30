@@ -61,6 +61,11 @@ let permissionsTarget = null;
 let permissionsPlatform = 'posix';
 let textEditorTarget = null;
 let textEditorOriginalContent = '';
+let textEditorEtag = null;
+const selectedFiles = new Set();
+let transferOperation = 'move';
+let transferPaths = [];
+let uploadPaused = false;
 
 async function api(path, options) {
   progress.start();
@@ -76,7 +81,7 @@ async function api(path, options) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    throw Object.assign(new Error(body.error || `Request failed: ${res.status}`), { status: res.status });
   }
   if (res.status === 204) return null;
   return res.json();
@@ -291,6 +296,8 @@ function renderBreadcrumb() {
 }
 
 function renderFileRows() {
+  selectedFiles.clear();
+  updateSelectedFiles();
   els.rows.innerHTML = '';
   els.fileTable.hidden = state.entries.length === 0;
   els.emptyState.hidden = state.entries.length > 0;
@@ -303,6 +310,18 @@ function renderFileRows() {
     const iconTd = document.createElement('td');
     iconTd.className = 'icon-cell';
     iconTd.innerHTML = `<span class="material-symbols-outlined">${fileIcon(entry)}</span>`;
+    const select = document.createElement('input');
+    select.type = 'checkbox';
+    select.className = 'file-selection';
+    select.setAttribute('aria-label', `Select ${entry.name}`);
+    select.dataset.fileName = entry.name;
+    select.addEventListener('click', (e) => e.stopPropagation());
+    select.addEventListener('dblclick', (e) => e.stopPropagation());
+    select.addEventListener('change', () => {
+      if (select.checked) selectedFiles.add(entry.name); else selectedFiles.delete(entry.name);
+      updateSelectedFiles();
+    });
+    iconTd.prepend(select);
     tr.appendChild(iconTd);
 
     const nameTd = document.createElement('td');
@@ -331,6 +350,18 @@ function renderFileRows() {
       actionsTd.appendChild(downloadBtn);
     }
     tr.appendChild(actionsTd);
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'icon-btn';
+    more.setAttribute('aria-label', `Actions for ${entry.name}`);
+    more.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">more_vert</span>';
+    more.addEventListener('dblclick', (e) => e.stopPropagation());
+    more.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = more.getBoundingClientRect();
+      tr.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: rect.left, clientY: rect.bottom }));
+    });
+    actionsTd.append(more);
 
     if (entry.type === 'dir') {
       tr.addEventListener('dblclick', () => {
@@ -361,7 +392,10 @@ function renderFileRows() {
         items.push({ icon: 'download', label: 'Download', onClick: () => downloadEntry(entry) });
         if (isViewable(entry)) items.push({ icon: 'visibility', label: 'View', onClick: () => openPreviewModal(entry) });
         if (isEditableText(entry)) items.push({ icon: 'edit', label: 'Edit', onClick: () => openTextEditorModal(entry) });
+        items.push({ icon: 'history', label: 'Version history', onClick: () => openVersions(entry) });
       }
+      items.push({ icon: 'content_copy', label: 'Copy to…', onClick: () => openTransfer('copy', [entry.name]) });
+      items.push({ icon: 'drive_file_move', label: 'Move to…', onClick: () => openTransfer('move', [entry.name]) });
       items.push({ icon: 'drive_file_rename_outline', label: 'Rename', onClick: () => openRenameModal(entry) });
       items.push({ icon: 'lock', label: 'Permissions', onClick: () => openPermissionsModal(entry) });
       items.push({ icon: 'delete', label: 'Move to trash', danger: true, onClick: () => deleteEntry(entry) });
@@ -377,6 +411,8 @@ function renderFileRows() {
 // Restore/Delete-permanently actions instead of Download/context-menu, and
 // no drilling into folders — you restore first, then browse normally.
 function renderTrashRows() {
+  selectedFiles.clear();
+  updateSelectedFiles();
   els.rows.innerHTML = '';
   els.fileTable.hidden = state.entries.length === 0;
   els.emptyState.hidden = state.entries.length > 0;
@@ -497,7 +533,7 @@ async function deleteEntry(entry) {
 // --- Upload ---
 
 els.uploadInput.addEventListener('change', async () => {
-  const files = els.uploadInput.files;
+  const files = Array.from(els.uploadInput.files || []);
   if (!files || files.length === 0 || !state.currentLocationId) return;
   if (state.viewingTrash) {
     showToast("Can't upload into Trash", 'error');
@@ -505,19 +541,29 @@ els.uploadInput.addEventListener('change', async () => {
     return;
   }
 
-  const formData = new FormData();
-  for (const file of files) formData.append('files', file);
-
+  const location = state.currentLocationId;
+  const folder = state.currentPath;
+  const status = document.getElementById('file-upload-status');
+  const pause = document.getElementById('file-upload-cancel');
+  uploadPaused = false;
+  els.uploadInput.disabled = true;
+  status.hidden = false;
+  pause.hidden = false;
+  pause.textContent = 'Pause upload';
   try {
-    const result = await api(`/files/upload?location=${state.currentLocationId}&path=${encodeURIComponent(state.currentPath)}`, {
-      method: 'POST',
-      body: formData,
-    });
-    showToast(`Uploaded ${result.uploaded} file${result.uploaded === 1 ? '' : 's'}`, 'success');
+    for (const file of files) {
+      if (uploadPaused) break;
+      await uploadResumable(file, location, folder, status);
+    }
+    if (uploadPaused) status.textContent = 'Upload paused. Select the same file again to resume; completed chunks are kept for seven days.';
+    else { status.textContent = 'Uploads complete.'; showToast('Uploaded', 'success'); }
     await loadBrowse();
   } catch (err) {
+    status.textContent = `Upload stopped: ${err.message}. Select the same file again to resume.`;
     showToast(`Upload failed: ${err.message}`, 'error');
   } finally {
+    pause.hidden = true;
+    els.uploadInput.disabled = false;
     els.uploadInput.value = '';
   }
 });
@@ -646,6 +692,8 @@ els.previewModal.addEventListener('click', (e) => {
 // --- Text editor ---
 
 async function openTextEditorModal(entry) {
+  textEditorEtag = null;
+  els.textEditorSaveBtn.disabled = true;
   textEditorTarget = entry;
   els.textEditorHeading.textContent = entry.name;
   els.textEditorError.hidden = true;
@@ -657,6 +705,8 @@ async function openTextEditorModal(entry) {
   try {
     const result = await api(`/files/text?location=${state.currentLocationId}&path=${encodeURIComponent(p)}`);
     textEditorOriginalContent = result.content;
+    textEditorEtag = result.etag;
+    els.textEditorSaveBtn.disabled = false;
     els.textEditorTextarea.value = result.content;
   } catch (err) {
     els.textEditorError.textContent = err.message;
@@ -686,12 +736,13 @@ els.textEditorSaveBtn.addEventListener('click', async () => {
 
   const p = joinPath(state.currentPath, textEditorTarget.name);
   try {
-    await api(`/files/text?location=${state.currentLocationId}&path=${encodeURIComponent(p)}`, {
+    const result = await api(`/files/text?location=${state.currentLocationId}&path=${encodeURIComponent(p)}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'text/plain', ...(textEditorEtag ? { 'If-Match': textEditorEtag } : {}) },
       body: els.textEditorTextarea.value,
     });
     textEditorOriginalContent = els.textEditorTextarea.value;
+    textEditorEtag = result.etag;
     showToast('Saved', 'success');
     await loadBrowse();
   } catch (err) {
@@ -802,6 +853,172 @@ async function loadAccountBadge() {
   } catch {
     /* ignore */
   }
+}
+
+function updateSelectedFiles() {
+  document.getElementById('file-bulk-bar').hidden = selectedFiles.size === 0;
+  document.getElementById('file-selected-count').textContent = `${selectedFiles.size} selected`;
+}
+document.getElementById('file-select-all').addEventListener('click', () => {
+  document.querySelectorAll('.file-selection').forEach((input) => { input.checked = true; selectedFiles.add(input.dataset.fileName); });
+  updateSelectedFiles();
+});
+document.getElementById('file-clear-selected').addEventListener('click', () => {
+  document.querySelectorAll('.file-selection').forEach((input) => { input.checked = false; });
+  selectedFiles.clear(); updateSelectedFiles();
+});
+for (const operation of ['copy', 'move']) document.getElementById(`file-${operation}-selected`).addEventListener('click', () => openTransfer(operation, [...selectedFiles]));
+document.getElementById('file-trash-selected').addEventListener('click', async () => {
+  if (!await confirmDialog(`Move ${selectedFiles.size} selected items to trash?`)) return;
+  try {
+    const result = await api('/files/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: state.currentLocationId, operation: 'trash', paths: [...selectedFiles].map((name) => joinPath(state.currentPath, name)) }) });
+    reportBulk(result); await loadBrowse();
+  } catch (err) { showToast(err.message, 'error'); }
+});
+function reportBulk(result) {
+  const failures = result.results.filter((item) => !item.ok);
+  showToast(failures.length ? `${result.results.length - failures.length} completed; ${failures.length} failed: ${failures.map((item) => `${item.path}: ${item.error}`).join('; ')}` : 'Done', failures.length ? 'error' : 'success');
+}
+let transferLocation;
+function openTransfer(operation, names) {
+  transferOperation = operation;
+  transferLocation = state.currentLocationId;
+  transferPaths = names.map((name) => joinPath(state.currentPath, name));
+  document.getElementById('file-transfer-heading').textContent = `${operation === 'move' ? 'Move' : 'Copy'} ${names.length} item${names.length === 1 ? '' : 's'}`;
+  const select = document.getElementById('file-transfer-location');
+  select.replaceChildren(...state.locations.map((location) => new Option(location.name, location.id)));
+  select.value = state.currentLocationId;
+  document.getElementById('file-transfer-path').value = state.currentPath;
+  document.getElementById('file-transfer-error').hidden = true;
+  document.getElementById('file-transfer-modal').classList.add('is-open');
+  document.getElementById('file-transfer-path').focus();
+}
+document.getElementById('file-transfer-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const button = e.submitter;
+  button.disabled = true;
+  try {
+    const result = await api('/files/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: transferLocation, operation: transferOperation, paths: transferPaths, destinationLocation: Number(document.getElementById('file-transfer-location').value), destinationPath: document.getElementById('file-transfer-path').value }) });
+    const failures = result.results.filter((item) => !item.ok);
+    if (failures.length) {
+      transferPaths = failures.map((item) => item.path);
+      const error = document.getElementById('file-transfer-error');
+      error.textContent = failures.map((item) => `${item.path}: ${item.error}`).join('; ');
+      error.hidden = false;
+    } else document.getElementById('file-transfer-modal').classList.remove('is-open');
+    reportBulk(result); await loadBrowse();
+  } catch (err) {
+    const error = document.getElementById('file-transfer-error'); error.textContent = err.message; error.hidden = false;
+  } finally { button.disabled = false; }
+});
+async function openVersions(entry) {
+  const location = state.currentLocationId;
+  const filePath = joinPath(state.currentPath, entry.name);
+  const query = `location=${location}&path=${encodeURIComponent(filePath)}`;
+  const modal = document.getElementById('file-versions-modal');
+  const list = document.getElementById('file-versions-list');
+  list.textContent = 'Loading versions…';
+  modal.classList.add('is-open');
+  async function refresh() {
+    try {
+      const versions = await api(`/files/versions?${query}`);
+      list.replaceChildren();
+      if (!versions.length) list.textContent = 'No earlier versions. A version is saved when this file is overwritten through SyncMark.';
+      for (const version of versions) {
+        const row = document.createElement('div');
+        row.className = 'file-version-row';
+        const label = document.createElement('p');
+        label.textContent = `${formatModified(version.savedAt)} · ${formatBytes(version.size)}`;
+        row.append(label);
+        for (const preview of [true, false]) {
+          const link = document.createElement('a');
+          link.href = `/api/files/versions/${version.id}?${query}${preview ? '&preview=1' : ''}`;
+          link.textContent = preview ? 'Preview' : 'Download';
+          if (preview) { link.target = '_blank'; link.rel = 'noopener'; }
+          else link.download = entry.name;
+          row.append(link);
+        }
+        const restore = document.createElement('button');
+        restore.type = 'button'; restore.className = 'secondary'; restore.textContent = 'Restore';
+        restore.addEventListener('click', async () => {
+          if (!await confirmDialog(`Restore this version of “${entry.name}”? The current contents will be saved as another version.`)) return;
+          restore.disabled = true;
+          try {
+            const result = await api(`/files/versions/${version.id}/restore?${query}`, { method: 'POST', headers: entry.etag ? { 'If-Match': entry.etag } : {} });
+            entry.etag = result.etag;
+            showToast('Version restored', 'success'); await loadBrowse(); await refresh();
+          } catch (err) { showToast(err.message, 'error'); restore.disabled = false; }
+        });
+        row.append(restore); list.append(row);
+      }
+    } catch (err) { list.textContent = err.message; }
+  }
+  await refresh();
+}
+for (const id of ['file-transfer-modal', 'file-versions-modal', 'file-sync-modal']) {
+  const modal = document.getElementById(id);
+  modal.addEventListener('click', (e) => { if (e.target === modal || e.target.closest('[data-close-file-modal]')) modal.classList.remove('is-open'); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.classList.remove('is-open'); });
+}
+document.getElementById('file-sync-btn').addEventListener('click', async () => {
+  if (!state.currentLocationId) return showToast('Choose a location first', 'error');
+  try {
+    const info = await api(`/files/sync-info?location=${state.currentLocationId}`);
+    document.getElementById('file-sync-url').value = new URL(info.webdavPath, location.origin).href;
+    document.getElementById('file-sync-modal').classList.add('is-open');
+  } catch (err) { showToast(err.message, 'error'); }
+});
+document.getElementById('file-sync-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(document.getElementById('file-sync-url').value); showToast('Address copied', 'success'); }
+  catch { document.getElementById('file-sync-url').select(); showToast('Select and copy the address', 'info'); }
+});
+document.getElementById('file-upload-cancel').addEventListener('click', () => { uploadPaused = true; document.getElementById('file-upload-cancel').textContent = 'Pausing after this chunk…'; });
+async function uploadResumable(file, location, folder, status) {
+  const target = joinPath(folder, file.name);
+  const key = `syncmark:upload:${location}:${target}:${file.size}:${file.lastModified}`;
+  let id;
+  try { id = localStorage.getItem(key); } catch { /* storage may be disabled */ }
+  let session;
+  if (id) {
+    try { session = await api(`/files/uploads/${id}?location=${location}`); }
+    catch (err) { if (![404, 410].includes(err.status)) throw err; id = null; }
+  }
+  if (!id) {
+    const create = (overwrite) => api('/files/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location, path: target, size: file.size, overwrite }) });
+    try { session = await create(false); }
+    catch (err) {
+      if (err.status !== 409 || !await confirmDialog(`“${file.name}” already exists. Replace it and save its current contents in version history?`)) throw err;
+      session = await create(true);
+    }
+    id = session.id;
+    try { localStorage.setItem(key, id); } catch { /* upload still works without persistence */ }
+  }
+  let offset = session.offset;
+  while (offset < file.size && !uploadPaused) {
+    status.textContent = `${file.name}: ${Math.floor(offset / file.size * 100)}% — ${formatBytes(offset)} of ${formatBytes(file.size)}`;
+    let attempts = 0;
+    while (true) {
+      try {
+        const result = await api(`/files/uploads/${id}?location=${location}`, { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream', 'Upload-Offset': String(offset) }, body: file.slice(offset, offset + session.chunkSize) });
+        offset = result.offset; break;
+      } catch (err) {
+        if (++attempts >= 3 || (err.status && ![409, 423, 500, 502, 503].includes(err.status))) throw err;
+        await new Promise((resolve) => setTimeout(resolve, attempts * 750));
+        offset = (await api(`/files/uploads/${id}?location=${location}`)).offset;
+        if (offset === file.size) break;
+      }
+    }
+  }
+  if (uploadPaused) return;
+  try { await api(`/files/uploads/${id}/complete?location=${location}`, { method: 'POST' }); }
+  catch (err) {
+    if (err.status === 412) {
+      await api(`/files/uploads/${id}?location=${location}`, { method: 'DELETE' });
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
+    }
+    throw err;
+  }
+  try { localStorage.removeItem(key); } catch { /* ignore */ }
 }
 
 loadLocations().then(() => {

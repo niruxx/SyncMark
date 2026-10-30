@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node test/all.js",
     "reset-password": "node scripts/reset-password.js"
   },
   "engines": {

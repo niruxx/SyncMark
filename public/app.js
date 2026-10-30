@@ -100,11 +100,14 @@ async function loadFolders() {
 async function loadBookmarks() {
   const params = new URLSearchParams();
   if (state.query) params.set('q', state.query);
+  const selectedTag = document.getElementById('bookmark-tag-filter').value;
+  if (selectedTag) params.set('tag', selectedTag);
   if (!state.favoritesOnly && state.currentFolder) params.set('folder', state.currentFolder);
   if (state.favoritesOnly) params.set('favorite', '1');
   params.set('sort', state.sort);
   state.bookmarks = await api(`/bookmarks?${params.toString()}`);
   renderBookmarks();
+  window.bookmarkTools?.refreshWidgets();
 }
 
 function renderFolderDatalist() {
@@ -293,6 +296,7 @@ function renderFolderBookmarkList(path) {
     const li = document.createElement('li');
     const link = document.createElement('a');
     link.href = bookmark.url;
+    window.bookmarkTools.trackLink(link, bookmark);
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.draggable = false;
@@ -452,6 +456,7 @@ function renderRow(bookmark) {
   const titleTd = document.createElement('td');
   titleTd.dataset.label = 'Title';
   titleTd.textContent = bookmark.title;
+  titleTd.appendChild(window.bookmarkTools.metadata(bookmark));
   titleTd.title = 'Double-click to rename';
   titleTd.addEventListener('dblclick', (e) => {
     e.stopPropagation();
@@ -463,6 +468,7 @@ function renderRow(bookmark) {
   urlTd.dataset.label = 'URL';
   const link = document.createElement('a');
   link.href = bookmark.url;
+  window.bookmarkTools.trackLink(link, bookmark);
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   link.draggable = false;
@@ -481,6 +487,7 @@ function renderRow(bookmark) {
   actionsTd.appendChild(makeStarButton(bookmark));
   actionsTd.appendChild(makeEditButton(bookmark));
   actionsTd.appendChild(makeDeleteButton(bookmark));
+  actionsTd.appendChild(window.bookmarkTools.actions(bookmark));
   tr.appendChild(actionsTd);
 
   makeDraggable(tr, bookmark);
@@ -514,6 +521,8 @@ function renderCard(bookmark) {
   link.className = 'card-url';
   link.textContent = bookmark.url;
   card.appendChild(link);
+  window.bookmarkTools.trackLink(link, bookmark);
+  card.appendChild(window.bookmarkTools.metadata(bookmark));
 
   if (bookmark.folder) {
     const folderBadge = document.createElement('span');
@@ -527,6 +536,7 @@ function renderCard(bookmark) {
   actions.className = 'actions';
   actions.appendChild(makeEditButton(bookmark));
   actions.appendChild(makeDeleteButton(bookmark));
+  actions.appendChild(window.bookmarkTools.actions(bookmark));
   card.appendChild(actions);
 
   makeDraggable(card, bookmark);
@@ -914,6 +924,8 @@ function openModal(mode, bookmark) {
   els.modalUrlInput.value = bookmark ? bookmark.url : '';
   els.modalFolderInput.value = bookmark ? bookmark.folder : state.currentFolder;
   els.modalFavoriteInput.checked = bookmark ? Boolean(bookmark.favorite) : false;
+  document.getElementById('modal-tags-input').value = bookmark ? (Array.isArray(bookmark.tags) ? bookmark.tags : JSON.parse(bookmark.tags || '[]')).join(', ') : '';
+  document.getElementById('modal-notes-input').value = bookmark?.notes || '';
   els.modalError.hidden = true;
   els.modal.classList.add('is-open');
   els.modalTitleInput.focus();
@@ -943,6 +955,8 @@ els.modalForm.addEventListener('submit', async (e) => {
     url: els.modalUrlInput.value.trim(),
     folder: els.modalFolderInput.value.trim(),
     favorite: els.modalFavoriteInput.checked,
+    tags: document.getElementById('modal-tags-input').value.split(',').map((value) => value.trim()).filter(Boolean),
+    notes: document.getElementById('modal-notes-input').value,
   };
 
   try {
@@ -1170,6 +1184,7 @@ async function loadAccountBadge() {
   }
 }
 
+window.bookmarkTools.init({ api, context: () => ({ folder: state.currentFolder, favoritesOnly: state.favoritesOnly }), refresh: () => Promise.all([loadBookmarks(), loadFolders()]), loadBookmarks });
 setView(state.view);
 loadFolders();
 loadBookmarks();
