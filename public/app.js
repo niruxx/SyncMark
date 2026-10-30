@@ -45,7 +45,7 @@ const els = {
 const FALLBACK_ICON =
   'data:image/svg+xml;utf8,' +
   encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%2399a1b3" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 4 6 4 9s-1.5 6.3-4 9c-2.5-2.7-4-6-4-9s1.5-6.3 4-9z"/></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#99a1b3" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 4 6 4 9s-1.5 6.3-4 9c-2.5-2.7-4-6-4-9s1.5-6.3 4-9z"/></svg>'
   );
 
 function faviconUrl(url) {
@@ -407,6 +407,8 @@ function setView(view) {
   localStorage.setItem('syncmark:view', view);
   els.viewListBtn.classList.toggle('active', view === 'list');
   els.viewGridBtn.classList.toggle('active', view === 'grid');
+  els.viewListBtn.setAttribute('aria-pressed', String(view === 'list'));
+  els.viewGridBtn.setAttribute('aria-pressed', String(view === 'grid'));
   els.listView.hidden = view !== 'list';
   els.gridView.hidden = view !== 'grid';
 }
@@ -416,6 +418,13 @@ function setView(view) {
 function renderBookmarks() {
   els.resultCount.textContent = `${state.bookmarks.length} bookmark${state.bookmarks.length === 1 ? '' : 's'}`;
   els.emptyState.hidden = state.bookmarks.length > 0;
+  els.emptyState.textContent = state.query
+    ? 'No bookmarks match your search. Try a different title or URL.'
+    : state.favoritesOnly
+      ? 'No favorites yet. Star a bookmark to keep it close.'
+      : state.currentFolder
+        ? 'This folder is empty. Add a bookmark to get started.'
+        : 'Your collection starts here. Add a bookmark, or import your browser bookmarks in Settings.';
 
   els.rows.innerHTML = '';
   els.gridView.innerHTML = '';

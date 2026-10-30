@@ -1,4 +1,55 @@
 (function () {
+  // Keep the same navigation and action hierarchy on every workspace page.
+  const workspaceNav = document.querySelector('nav.nav');
+  const workspaceMain = document.querySelector('main.content');
+  if (workspaceNav && workspaceMain) {
+    document.getElementById('app-shell').classList.add('has-workspace-nav');
+    workspaceNav.setAttribute('aria-label', 'Main navigation');
+    const icons = { Bookmarks: 'bookmarks', Contacts: 'contacts', Calendar: 'calendar_month', Files: 'folder', Passwords: 'key', Settings: 'settings', Admin: 'admin_panel_settings' };
+    workspaceNav.querySelectorAll('a').forEach((link) => {
+      const label = link.textContent.trim();
+      const icon = document.createElement('span');
+      icon.className = 'material-symbols-outlined';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = icons[label] || 'dashboard';
+      link.prepend(icon);
+      if (link.classList.contains('active')) link.setAttribute('aria-current', 'page');
+    });
+    workspaceMain.id ||= 'main-content';
+    workspaceMain.tabIndex = -1;
+    const skip = document.createElement('a');
+    skip.className = 'skip-link';
+    skip.href = `#${workspaceMain.id}`;
+    skip.textContent = 'Skip to content';
+    document.body.prepend(skip);
+    const active = workspaceNav.querySelector('a.active');
+    const title = active ? active.textContent.replace(active.querySelector('span').textContent, '').trim() : 'Workspace';
+    const descriptions = {
+      Bookmarks: 'Your favorite places, all in one place.',
+      Contacts: 'Keep your people and groups close.',
+      Calendar: 'Make room for what matters.',
+      Files: 'A home for everything you need.',
+      Passwords: 'Your credentials, securely organized.',
+      Settings: 'Make SyncMark work for you.',
+    };
+    const heading = document.createElement('div');
+    heading.className = 'workspace-heading';
+    const copy = document.createElement('div');
+    const headingTitle = document.createElement('h2');
+    headingTitle.textContent = title;
+    const description = document.createElement('p');
+    description.textContent = descriptions[title] || 'Manage your workspace.';
+    copy.append(headingTitle, description);
+    heading.append(copy);
+    const actions = document.createElement('div');
+    actions.className = 'workspace-actions';
+    document.querySelectorAll('.topbar-actions > button:not(.theme-toggle), .topbar-actions > label.button, .topbar-actions > input[type="file"]').forEach((el) => actions.append(el));
+    heading.append(actions);
+    workspaceMain.prepend(heading);
+    document.querySelectorAll('input[type="search"]').forEach((input) => {
+      if (!input.getAttribute('aria-label')) input.setAttribute('aria-label', input.placeholder || 'Search');
+    });
+  }
   /* ---------- Top progress bar ----------
      Reference-counted so overlapping requests don't cut each other short:
      the bar creeps toward 90% while anything is in flight, then completes
@@ -47,6 +98,7 @@
       setWidth(100);
 
       setTimeout(() => {
+        if (pending > 0) return;
         progressBar.classList.remove('active');
         setTimeout(() => {
           if (pending === 0) setWidth(0);
@@ -218,6 +270,8 @@
 
   const toastContainer = document.createElement('div');
   toastContainer.className = 'toast-container';
+  toastContainer.setAttribute('role', 'status');
+  toastContainer.setAttribute('aria-live', 'polite');
   document.body.appendChild(toastContainer);
 
   window.showToast = function showToast(message, type = 'info') {
@@ -231,6 +285,7 @@
     setTimeout(() => {
       toast.classList.remove('show');
       toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+      setTimeout(() => toast.remove(), 400);
     }, 3200);
   };
 
