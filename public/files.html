@@ -100,13 +100,23 @@
           </div>
           <button type="button" id="file-sync-btn" class="secondary"><span class="material-symbols-outlined" aria-hidden="true">sync</span>Sync devices</button>
         </div>
-        <div id="file-bulk-bar" class="toolbar" hidden aria-label="Selected file actions">
+        <div id="file-bulk-bar" class="toolbar file-selection-bar" role="toolbar" hidden aria-label="Selected file actions">
+          <button type="button" class="icon-btn" id="file-clear-selected" title="Clear selection (Esc)" aria-label="Clear selection">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
           <span id="file-selected-count" role="status"></span>
-          <button type="button" class="secondary" id="file-select-all">Select all</button>
-          <button type="button" class="secondary" id="file-copy-selected">Copy</button>
-          <button type="button" class="secondary" id="file-move-selected">Move</button>
-          <button type="button" class="secondary" id="file-trash-selected">Move to trash</button>
-          <button type="button" class="secondary" id="file-clear-selected">Clear</button>
+          <span class="file-selection-actions">
+            <button type="button" class="secondary" id="file-open-selected" data-single><span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>Open</button>
+            <button type="button" class="secondary" id="file-download-selected" data-single><span class="material-symbols-outlined" aria-hidden="true">download</span>Download</button>
+            <button type="button" class="secondary" id="file-rename-selected" data-single title="Rename (F2)"><span class="material-symbols-outlined" aria-hidden="true">drive_file_rename_outline</span>Rename</button>
+            <button type="button" class="secondary" id="file-copy-selected"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span>Copy to…</button>
+            <button type="button" class="secondary" id="file-move-selected"><span class="material-symbols-outlined" aria-hidden="true">drive_file_move</span>Move to…</button>
+            <button type="button" class="secondary file-trash-btn" id="file-trash-selected" title="Move to trash (Delete)"><span class="material-symbols-outlined" aria-hidden="true">delete</span>Trash</button>
+            <button type="button" class="secondary" id="file-select-all" title="Select all (Ctrl+A)"><span class="material-symbols-outlined" aria-hidden="true">select_all</span>Select all</button>
+            <button type="button" class="icon-btn" id="file-more-selected" title="More actions" aria-label="More actions for selection">
+              <span class="material-symbols-outlined" aria-hidden="true">more_vert</span>
+            </button>
+          </span>
         </div>
         <p id="file-upload-status" role="status" hidden></p>
         <button type="button" id="file-upload-cancel" class="secondary" hidden>Pause upload</button>

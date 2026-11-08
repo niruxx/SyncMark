@@ -439,20 +439,108 @@ function trashMenuItems(item) {
   ];
 }
 
-function createSelectBox(entry, onToggle) {
+function createSelectBox(entry) {
   const select = document.createElement('input');
   select.type = 'checkbox';
   select.className = 'file-selection';
   select.setAttribute('aria-label', `Select ${entry.name}`);
   select.dataset.fileName = entry.name;
+  select.tabIndex = -1; // the row/card itself is the keyboard target
   select.addEventListener('click', (e) => e.stopPropagation());
   select.addEventListener('dblclick', (e) => e.stopPropagation());
   select.addEventListener('change', () => {
     if (select.checked) selectedFiles.add(entry.name); else selectedFiles.delete(entry.name);
-    onToggle?.(select.checked);
-    updateSelectedFiles();
+    selectionAnchor = entry.name;
+    syncSelection();
   });
   return select;
+}
+
+// --- Click-to-select ---
+// Plain click selects one item, Ctrl/Cmd+click toggles, Shift+click selects a
+// range from the last clicked item. The checkboxes stay as an explicit,
+// touch-friendly alternative and always mirror `selectedFiles`.
+
+let selectionAnchor = null;
+
+function itemElements() {
+  return [...document.querySelectorAll('#file-rows tr[data-name], #file-grid .file-card[data-name]')];
+}
+
+function syncSelection() {
+  for (const el of itemElements()) {
+    const on = selectedFiles.has(el.dataset.name);
+    el.classList.toggle('is-selected', on);
+    el.setAttribute('aria-selected', String(on));
+    const box = el.querySelector('.file-selection');
+    if (box) box.checked = on;
+  }
+  updateSelectedFiles();
+}
+
+function setSelection(names, anchor = names[names.length - 1] ?? null) {
+  selectedFiles.clear();
+  for (const name of names) selectedFiles.add(name);
+  selectionAnchor = anchor;
+  syncSelection();
+}
+
+function handleItemClick(e, entry) {
+  if (e.target.closest('button, input, a')) return;
+  const names = state.entries.map((item) => item.name);
+  if (e.shiftKey && selectionAnchor && names.includes(selectionAnchor)) {
+    const [a, b] = [names.indexOf(selectionAnchor), names.indexOf(entry.name)].sort((x, y) => x - y);
+    const range = names.slice(a, b + 1);
+    if (e.ctrlKey || e.metaKey) range.forEach((name) => selectedFiles.add(name));
+    else { selectedFiles.clear(); range.forEach((name) => selectedFiles.add(name)); }
+    syncSelection();
+  } else if (e.ctrlKey || e.metaKey) {
+    if (selectedFiles.has(entry.name)) selectedFiles.delete(entry.name); else selectedFiles.add(entry.name);
+    selectionAnchor = entry.name;
+    syncSelection();
+  } else {
+    setSelection([entry.name]);
+  }
+}
+
+function selectedEntries() {
+  return state.entries.filter((entry) => selectedFiles.has(entry.name));
+}
+
+function selectionMenuItems() {
+  const count = selectedFiles.size;
+  const names = [...selectedFiles];
+  return [
+    { icon: 'content_copy', label: `Copy ${count} items to…`, onClick: () => openTransfer('copy', names) },
+    { icon: 'drive_file_move', label: `Move ${count} items to…`, onClick: () => openTransfer('move', names) },
+    { icon: 'select_all', label: 'Select all', onClick: () => setSelection(state.entries.map((entry) => entry.name)) },
+    { icon: 'deselect', label: 'Clear selection', onClick: () => setSelection([]) },
+    { icon: 'delete', label: `Move ${count} items to trash`, danger: true, onClick: trashSelected },
+  ];
+}
+
+// Right-clicking an unselected item selects just it (like a desktop file
+// manager); right-clicking inside a multi-selection acts on all of it.
+function itemMenu(entry) {
+  if (!selectedFiles.has(entry.name)) setSelection([entry.name]);
+  return selectedFiles.size > 1 ? selectionMenuItems() : entryMenuItems(entry);
+}
+
+function attachItemBehaviour(el, entry) {
+  el.dataset.name = entry.name;
+  el.tabIndex = 0;
+  el.setAttribute('aria-selected', 'false');
+  el.addEventListener('click', (e) => handleItemClick(e, entry));
+  el.addEventListener('dblclick', (e) => {
+    if (e.target.closest('button, input, a')) return;
+    openEntry(entry);
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.target !== el) return;
+    if (e.key === 'Enter') { e.preventDefault(); openEntry(entry); }
+    else if (e.key === ' ') { e.preventDefault(); handleItemClick({ target: el, ctrlKey: true, metaKey: false, shiftKey: e.shiftKey }, entry); }
+  });
+  attachMenu(el, () => itemMenu(entry));
 }
 
 function iconButton(icon, label, onClick, extraClass = '') {
@@ -486,6 +574,7 @@ function attachMenu(host, getItems) {
 
 function prepareListing(emptyText) {
   selectedFiles.clear();
+  selectionAnchor = null;
   updateSelectedFiles();
   els.rows.innerHTML = '';
   els.fileGrid.innerHTML = '';
@@ -528,10 +617,11 @@ function trashThumb() {
   return thumb;
 }
 
-function createCard({ entry, title, meta, thumb, onOpen, getItems }) {
+function createCard({ entry, title, meta, thumb, getItems }) {
   const card = document.createElement('div');
   card.className = 'file-card';
   card.tabIndex = 0;
+  card.setAttribute('role', 'option');
   card.setAttribute('aria-label', title);
   card.style.setProperty('--stagger', String(Math.min(els.fileGrid.children.length, 14)));
 
@@ -541,7 +631,7 @@ function createCard({ entry, title, meta, thumb, onOpen, getItems }) {
   card.append(media);
 
   if (entry) {
-    const select = createSelectBox(entry, (checked) => card.classList.toggle('is-selected', checked));
+    const select = createSelectBox(entry);
     select.classList.add('file-card-select');
     card.append(select);
   }
@@ -556,13 +646,8 @@ function createCard({ entry, title, meta, thumb, onOpen, getItems }) {
   metaEl.textContent = meta;
   card.append(name, metaEl);
 
-  if (onOpen) {
-    card.addEventListener('dblclick', onOpen);
-    card.addEventListener('keydown', (e) => {
-      if (e.target === card && e.key === 'Enter') { e.preventDefault(); onOpen(); }
-    });
-  }
-  attachMenu(card, getItems);
+  if (entry) attachItemBehaviour(card, entry);
+  else attachMenu(card, getItems);
   return card;
 }
 
@@ -578,8 +663,6 @@ function renderFileRows() {
         title: entry.name,
         meta: entry.type === 'dir' ? 'Folder' : sizeText,
         thumb: createThumb(entry),
-        onOpen: () => openEntry(entry),
-        getItems: () => entryMenuItems(entry),
       }));
       continue;
     }
@@ -602,8 +685,7 @@ function renderFileRows() {
     actionsTd.append(actions);
     tr.append(actionsTd);
 
-    tr.addEventListener('dblclick', () => openEntry(entry));
-    attachMenu(tr, () => entryMenuItems(entry));
+    attachItemBehaviour(tr, entry);
     els.rows.appendChild(tr);
   }
 }
@@ -624,7 +706,6 @@ function renderTrashRows() {
         title: item.originalRelPath,
         meta: `${sizeText} · ${formatModified(item.deletedAt)}`,
         thumb: trashThumb(),
-        onOpen: null,
         getItems: () => trashMenuItems(item),
       }));
       continue;
@@ -1052,24 +1133,69 @@ async function loadAccountBadge() {
 }
 
 function updateSelectedFiles() {
-  document.getElementById('file-bulk-bar').hidden = selectedFiles.size === 0;
-  document.getElementById('file-selected-count').textContent = `${selectedFiles.size} selected`;
+  const count = selectedFiles.size;
+  document.getElementById('file-bulk-bar').hidden = count === 0;
+  document.getElementById('file-selected-count').textContent = `${count} selected`;
+  const single = count === 1 ? selectedEntries()[0] : null;
+  document.querySelectorAll('#file-bulk-bar [data-single]').forEach((btn) => { btn.hidden = !single; });
+  if (single) {
+    document.getElementById('file-download-selected').hidden = single.type !== 'file';
+    document.getElementById('file-open-selected').hidden = single.type === 'file' && !isViewable(single) && !isEditableText(single);
+  }
+  document.getElementById('file-select-all').hidden = count === state.entries.length;
 }
-document.getElementById('file-select-all').addEventListener('click', () => {
-  document.querySelectorAll('.file-selection').forEach((input) => { input.checked = true; selectedFiles.add(input.dataset.fileName); });
-  updateSelectedFiles();
-});
-document.getElementById('file-clear-selected').addEventListener('click', () => {
-  document.querySelectorAll('.file-selection').forEach((input) => { input.checked = false; });
-  selectedFiles.clear(); updateSelectedFiles();
+document.getElementById('file-select-all').addEventListener('click', () => setSelection(state.entries.map((entry) => entry.name)));
+document.getElementById('file-clear-selected').addEventListener('click', () => setSelection([]));
+document.getElementById('file-open-selected').addEventListener('click', () => { const [entry] = selectedEntries(); if (entry) openEntry(entry); });
+document.getElementById('file-download-selected').addEventListener('click', () => { const [entry] = selectedEntries(); if (entry) downloadEntry(entry); });
+document.getElementById('file-rename-selected').addEventListener('click', () => { const [entry] = selectedEntries(); if (entry) openRenameModal(entry); });
+document.getElementById('file-more-selected').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const rect = e.currentTarget.getBoundingClientRect();
+  const entries = selectedEntries();
+  showContextMenu(rect.left, rect.bottom, entries.length === 1 ? entryMenuItems(entries[0]) : selectionMenuItems());
 });
 for (const operation of ['copy', 'move']) document.getElementById(`file-${operation}-selected`).addEventListener('click', () => openTransfer(operation, [...selectedFiles]));
-document.getElementById('file-trash-selected').addEventListener('click', async () => {
-  if (!await confirmDialog(`Move ${selectedFiles.size} selected items to trash?`)) return;
+async function trashSelected() {
+  const count = selectedFiles.size;
+  if (!count) return;
+  if (count === 1) return deleteEntry(selectedEntries()[0]);
+  if (!await confirmDialog(`Move ${count} selected items to trash?`)) return;
   try {
     const result = await api('/files/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: state.currentLocationId, operation: 'trash', paths: [...selectedFiles].map((name) => joinPath(state.currentPath, name)) }) });
     reportBulk(result); await loadBrowse();
   } catch (err) { showToast(err.message, 'error'); }
+}
+document.getElementById('file-trash-selected').addEventListener('click', trashSelected);
+
+// Clicking empty space in the listing area clears the selection.
+document.querySelector('main.content').addEventListener('click', (e) => {
+  if (!selectedFiles.size) return;
+  if (e.target.closest('tbody tr, .file-card, #file-bulk-bar, .toolbar, button, input, a, label')) return;
+  setSelection([]);
+});
+
+// Keyboard shortcuts while browsing (ignored while typing or in a dialog).
+document.addEventListener('keydown', (e) => {
+  if (state.viewingTrash || !state.currentLocationId) return;
+  if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"], .modal-backdrop')) return;
+  if (document.querySelector('.modal-backdrop.is-open, .context-menu')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'a' && state.entries.length) {
+    e.preventDefault();
+    setSelection(state.entries.map((entry) => entry.name));
+  } else if (e.key === 'Escape' && selectedFiles.size) {
+    setSelection([]);
+  } else if (e.key === 'Delete' && selectedFiles.size) {
+    e.preventDefault();
+    trashSelected();
+  } else if (e.key === 'F2' && selectedFiles.size === 1) {
+    e.preventDefault();
+    openRenameModal(selectedEntries()[0]);
+  } else if (e.key === 'Enter' && selectedFiles.size === 1 && !e.target.closest('tbody tr, .file-card, button, a')) {
+    e.preventDefault();
+    openEntry(selectedEntries()[0]);
+  }
 });
 function reportBulk(result) {
   const failures = result.results.filter((item) => !item.ok);
