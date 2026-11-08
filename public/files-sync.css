@@ -1,9 +1,119 @@
-.file-selection { width: 18px; height: 18px; margin: 0 12px 0 0; accent-color: var(--primary); vertical-align: middle; cursor: pointer; }
-.file-table th:first-child, .file-table td:first-child { width: 76px; white-space: nowrap; }
-.file-table th:last-child, .file-table td:last-child { width: 12rem; }
+.file-selection { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); vertical-align: middle; cursor: pointer; }
 #file-bulk-bar { background: var(--primary-container); color: var(--on-primary-container); border-radius: 20px; padding: 12px 16px; margin-bottom: 16px; }
 #file-bulk-bar button { min-height: 44px; }
 .file-version-row { padding: 12px 0; border-bottom: 1px solid var(--outline-variant); display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .file-version-row p { flex-basis: 100%; margin: 0; }
 #file-upload-status { background: var(--surface-container-low); padding: 16px; border-radius: 16px; overflow-wrap: anywhere; }
-@media (max-width: 640px) { .file-table td:first-child, .file-table td:last-child { width: auto; } }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- View controls ---------- */
+
+.file-view-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.file-view-controls .view-toggle[hidden] { display: none; }
+.file-view-controls .view-btn { display: inline-flex; align-items: center; justify-content: center; }
+.file-view-controls .view-btn .material-symbols-outlined { font-size: 20px; }
+
+/* ---------- List view ----------
+   Explicit per-column classes so widths don't depend on nth-child rules, and
+   the actions cell stays a real table cell (a flex <td> drops out of table
+   layout, which is what pushed rows out of alignment). */
+
+.file-table th, .file-table td { padding-top: 0; padding-bottom: 0; height: 56px; }
+.file-table th { height: 44px; }
+
+.file-table th.col-select, .file-table td.col-select { width: 52px; padding-left: 20px; padding-right: 0; text-align: left; }
+.file-table th.col-name, .file-table td.col-name { width: auto; padding-left: 12px; }
+.file-table th.col-size, .file-table td.col-size { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+.file-table th.col-modified, .file-table td.col-modified { width: 200px; font-variant-numeric: tabular-nums; }
+.file-table th.col-actions, .file-table td.col-actions { width: 104px; padding-right: 12px; text-align: right; }
+.file-table td.col-size, .file-table td.col-modified { color: var(--on-surface-variant); font-size: 0.8125rem; }
+
+.file-name-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.file-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.file-danger-btn { color: var(--error); }
+
+/* Thumbnail shared by list rows and icon cards */
+.file-thumb {
+  position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: var(--corner-sm); overflow: hidden;
+  background: var(--surface-container-high); color: var(--on-surface-variant);
+}
+.file-thumb-dir { background: var(--primary-container); color: var(--on-primary-container); }
+.file-thumb .file-type-icon { font-size: 22px; }
+.file-thumb-dir .file-type-icon { font-variation-settings: 'FILL' 1; }
+.file-thumb img, .file-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.file-thumb-badge {
+  position: absolute; inset: auto 4px 4px auto; font-size: 18px !important; color: #fff;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); font-variation-settings: 'FILL' 1;
+}
+.file-table .file-thumb-badge { font-size: 14px !important; inset: auto 2px 2px auto; }
+
+/* ---------- Icon view ---------- */
+
+.file-grid { --tile: 168px; --thumb-icon: 56px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile)), 1fr)); }
+.file-grid[hidden] { display: none; }
+.file-grid[data-icon-size='small'] { --tile: 112px; --thumb-icon: 36px; gap: 8px; }
+.file-grid[data-icon-size='large'] { --tile: 248px; --thumb-icon: 80px; gap: 16px; }
+
+.file-card {
+  position: relative; display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 10px;
+  border-radius: 20px; border: 1px solid transparent; background: var(--surface-container-low);
+  cursor: default; user-select: none; min-width: 0;
+  transition: background-color .15s var(--ease), border-color .15s var(--ease), box-shadow .2s var(--ease);
+  animation: itemIn var(--dur-default) var(--spring-default) both;
+  animation-delay: calc(var(--stagger, 0) * 28ms);
+}
+.file-card:hover { background: var(--surface-container); border-color: var(--outline-variant); }
+.file-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.file-card.is-selected { background: var(--secondary-container, var(--primary-container)); border-color: var(--primary); }
+
+.file-card-media { position: relative; aspect-ratio: 1 / 1; margin-bottom: 6px; }
+.file-card .file-thumb { position: absolute; inset: 0; width: auto; height: auto; border-radius: 14px; }
+.file-card .file-thumb .file-type-icon { font-size: var(--thumb-icon); }
+.file-card .file-thumb.has-media { background: var(--surface-container-highest, var(--surface-container-high)); }
+
+.file-card-name { font-size: 0.875rem; font-weight: 500; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-card-meta { font-size: 0.75rem; color: var(--on-surface-variant); padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.file-grid[data-icon-size='small'] .file-card { padding: 6px 6px 8px; border-radius: 16px; }
+.file-grid[data-icon-size='small'] .file-card .file-thumb { border-radius: 10px; }
+.file-grid[data-icon-size='small'] .file-card-name { font-size: 0.8125rem; }
+.file-grid[data-icon-size='small'] .file-card-meta { display: none; }
+
+/* Checkbox + menu float over the thumbnail; shown on hover/focus or once selected. */
+.file-card-select, .file-card .file-more-btn { position: absolute; top: 14px; z-index: 1; opacity: 0; transition: opacity .12s var(--ease); }
+.file-card-select { left: 14px; width: 20px; height: 20px; border-radius: 4px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--surface) 85%, transparent); background: var(--surface); }
+.file-card .file-more-btn {
+  right: 12px; top: 12px; width: 32px; height: 32px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--on-surface);
+}
+.file-card:hover .file-card-select, .file-card:focus-within .file-card-select, .file-card-select:checked,
+.file-card:hover .file-more-btn, .file-card:focus-within .file-more-btn { opacity: 1; }
+.file-grid[data-icon-size='small'] .file-card-select { top: 10px; left: 10px; }
+.file-grid[data-icon-size='small'] .file-card .file-more-btn { top: 8px; right: 8px; width: 28px; height: 28px; }
+@media (hover: none) { .file-card-select, .file-card .file-more-btn { opacity: 1; } }
+
+@media (max-width: 640px) {
+  .file-view-controls { margin-left: 0; }
+  /* Phone rows: checkbox | thumb+name | actions, with size + date beneath the name. */
+  .file-table tbody tr {
+    display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center;
+    gap: 2px 10px; padding: 10px 8px 10px 14px;
+  }
+  .file-table td, .file-table td[data-label] { height: auto; padding: 0; border: 0; width: auto; min-width: 0; margin: 0; }
+  .file-table td[data-label]::before { content: none; }
+  .file-table td.col-select { grid-column: 1; grid-row: 1 / span 2; width: auto; padding: 0 4px 0 0; }
+  .file-table td.col-name, .file-table td.col-actions { padding: 0; width: auto; }
+  .file-table td.col-name { grid-column: 2 / 4; grid-row: 1; }
+  .file-table td.col-actions { grid-column: 4; grid-row: 1 / span 2; display: block; }
+  .file-table td.col-size { grid-column: 2; grid-row: 2; text-align: left; padding-left: 48px; font-size: 0.75rem; }
+  .file-table td.col-modified { grid-column: 3; grid-row: 2; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-table td.col-size::after { content: ' ·'; }
+  .file-grid { --tile: 140px; }
+  .file-grid[data-icon-size='small'] { --tile: 96px; }
+  .file-grid[data-icon-size='large'] { --tile: 100%; }
+}

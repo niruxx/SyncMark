@@ -13,6 +13,8 @@ const els = {
   resultCount: document.getElementById('result-count'),
   rows: document.getElementById('file-rows'),
   fileTable: document.getElementById('file-list'),
+  fileGrid: document.getElementById('file-grid'),
+  fileSizeToggle: document.getElementById('file-size-toggle'),
   modifiedHeader: document.getElementById('modified-header'),
   emptyState: document.getElementById('empty-state'),
   selectLocationState: document.getElementById('select-location-state'),
@@ -203,6 +205,7 @@ async function loadBrowse() {
   if (!state.currentLocationId) {
     els.selectLocationState.hidden = false;
     els.fileTable.hidden = true;
+    els.fileGrid.hidden = true;
     els.emptyState.hidden = true;
     els.trashHint.hidden = true;
     els.trashEmptyBtn.hidden = true;
@@ -295,167 +298,357 @@ function renderBreadcrumb() {
   });
 }
 
-function renderFileRows() {
+// --- View mode (list / icons) ---
+
+const VIEW_KEY = 'syncmark:files:view';
+const ICON_SIZE_KEY = 'syncmark:files:iconSize';
+const ICON_SIZES = ['small', 'medium', 'large'];
+
+function readPref(key, allowed, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return allowed.includes(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+state.view = readPref(VIEW_KEY, ['list', 'icons'], 'list');
+state.iconSize = readPref(ICON_SIZE_KEY, ICON_SIZES, 'medium');
+
+function applyViewControls() {
+  document.querySelectorAll('button[data-file-view]').forEach((btn) => {
+    const on = btn.dataset.fileView === state.view;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+  document.querySelectorAll('button[data-icon-size]').forEach((btn) => {
+    const on = btn.dataset.iconSize === state.iconSize;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+  els.fileSizeToggle.hidden = state.view !== 'icons';
+  els.fileGrid.dataset.iconSize = state.iconSize;
+}
+
+function setView(view) {
+  if (state.view === view) return;
+  state.view = view;
+  try { localStorage.setItem(VIEW_KEY, view); } catch { /* preference just won't persist */ }
+  applyViewControls();
+  rerenderEntries();
+}
+
+function setIconSize(size) {
+  state.iconSize = size;
+  try { localStorage.setItem(ICON_SIZE_KEY, size); } catch { /* preference just won't persist */ }
+  applyViewControls();
+}
+
+document.querySelectorAll('button[data-file-view]').forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.fileView)));
+document.querySelectorAll('button[data-icon-size]').forEach((btn) => btn.addEventListener('click', () => setIconSize(btn.dataset.iconSize)));
+
+function rerenderEntries() {
+  if (!state.currentLocationId) return;
+  if (state.viewingTrash) renderTrashRows();
+  else renderFileRows();
+}
+
+function viewUrl(entry) {
+  const p = joinPath(state.currentPath, entry.name);
+  return `/api/files/view?location=${state.currentLocationId}&path=${encodeURIComponent(p)}`;
+}
+
+function iconEl(name) {
+  const span = document.createElement('span');
+  span.className = 'material-symbols-outlined file-type-icon';
+  span.setAttribute('aria-hidden', 'true');
+  span.textContent = name;
+  return span;
+}
+
+// Thumbnail for images/videos (served by /files/view), falling back to the
+// file-type icon for everything else or if the media fails to load.
+function createThumb(entry) {
+  const thumb = document.createElement('span');
+  thumb.className = `file-thumb file-thumb-${entry.type === 'dir' ? 'dir' : 'file'}`;
+  const fallback = () => {
+    thumb.classList.remove('has-media');
+    thumb.replaceChildren(iconEl(fileIcon(entry)));
+  };
+
+  if (isViewableImage(entry)) {
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.alt = '';
+    img.src = viewUrl(entry);
+    img.addEventListener('error', fallback, { once: true });
+    thumb.classList.add('has-media');
+    thumb.append(img);
+  } else if (isViewableVideo(entry)) {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+    video.src = `${viewUrl(entry)}#t=0.5`;
+    video.setAttribute('aria-hidden', 'true');
+    video.tabIndex = -1;
+    video.addEventListener('error', fallback, { once: true });
+    const badge = iconEl('play_circle');
+    badge.classList.add('file-thumb-badge');
+    thumb.classList.add('has-media');
+    thumb.append(video, badge);
+  } else {
+    thumb.append(iconEl(fileIcon(entry)));
+  }
+  return thumb;
+}
+
+function openEntry(entry) {
+  if (entry.type === 'dir') {
+    state.currentPath = joinPath(state.currentPath, entry.name);
+    loadBrowse();
+  } else if (isViewable(entry)) openPreviewModal(entry);
+  else if (isEditableText(entry)) openTextEditorModal(entry);
+  else downloadEntry(entry);
+}
+
+function entryMenuItems(entry) {
+  const items = [];
+  if (entry.type === 'dir') {
+    items.push({ icon: 'folder_open', label: 'Open', onClick: () => openEntry(entry) });
+  } else {
+    items.push({ icon: 'download', label: 'Download', onClick: () => downloadEntry(entry) });
+    if (isViewable(entry)) items.push({ icon: 'visibility', label: 'View', onClick: () => openPreviewModal(entry) });
+    if (isEditableText(entry)) items.push({ icon: 'edit', label: 'Edit', onClick: () => openTextEditorModal(entry) });
+    items.push({ icon: 'history', label: 'Version history', onClick: () => openVersions(entry) });
+  }
+  items.push({ icon: 'content_copy', label: 'Copy to…', onClick: () => openTransfer('copy', [entry.name]) });
+  items.push({ icon: 'drive_file_move', label: 'Move to…', onClick: () => openTransfer('move', [entry.name]) });
+  items.push({ icon: 'drive_file_rename_outline', label: 'Rename', onClick: () => openRenameModal(entry) });
+  items.push({ icon: 'lock', label: 'Permissions', onClick: () => openPermissionsModal(entry) });
+  items.push({ icon: 'delete', label: 'Move to trash', danger: true, onClick: () => deleteEntry(entry) });
+  return items;
+}
+
+function trashMenuItems(item) {
+  return [
+    { icon: 'restore_from_trash', label: 'Restore', onClick: () => restoreTrashItem(item) },
+    { icon: 'delete_forever', label: 'Delete permanently', danger: true, onClick: () => deleteTrashItemPermanently(item) },
+  ];
+}
+
+function createSelectBox(entry, onToggle) {
+  const select = document.createElement('input');
+  select.type = 'checkbox';
+  select.className = 'file-selection';
+  select.setAttribute('aria-label', `Select ${entry.name}`);
+  select.dataset.fileName = entry.name;
+  select.addEventListener('click', (e) => e.stopPropagation());
+  select.addEventListener('dblclick', (e) => e.stopPropagation());
+  select.addEventListener('change', () => {
+    if (select.checked) selectedFiles.add(entry.name); else selectedFiles.delete(entry.name);
+    onToggle?.(select.checked);
+    updateSelectedFiles();
+  });
+  return select;
+}
+
+function iconButton(icon, label, onClick, extraClass = '') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `icon-btn ${extraClass}`.trim();
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${icon}</span>`;
+  btn.addEventListener('dblclick', (e) => e.stopPropagation());
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick(btn);
+  });
+  return btn;
+}
+
+function createMoreButton(label, host) {
+  return iconButton('more_vert', `Actions for ${label}`, (btn) => {
+    const rect = btn.getBoundingClientRect();
+    host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: rect.left, clientY: rect.bottom }));
+  }, 'file-more-btn');
+}
+
+function attachMenu(host, getItems) {
+  host.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, getItems());
+  });
+}
+
+function prepareListing(emptyText) {
   selectedFiles.clear();
   updateSelectedFiles();
   els.rows.innerHTML = '';
-  els.fileTable.hidden = state.entries.length === 0;
-  els.emptyState.hidden = state.entries.length > 0;
-  els.emptyState.textContent = 'This folder is empty.';
-  els.resultCount.textContent = state.entries.length ? `${state.entries.length} item${state.entries.length === 1 ? '' : 's'}` : '';
+  els.fileGrid.innerHTML = '';
+  const empty = state.entries.length === 0;
+  const icons = state.view === 'icons';
+  els.fileTable.hidden = empty || icons;
+  els.fileGrid.hidden = empty || !icons;
+  els.emptyState.hidden = !empty;
+  els.emptyState.textContent = emptyText;
+  els.resultCount.textContent = empty ? '' : `${state.entries.length} item${state.entries.length === 1 ? '' : 's'}`;
+  return icons;
+}
+
+function createNameCell(thumb, displayName) {
+  const nameTd = document.createElement('td');
+  nameTd.className = 'col-name';
+  const wrap = document.createElement('div');
+  wrap.className = 'file-name-cell';
+  const label = document.createElement('span');
+  label.className = 'file-name-text';
+  label.textContent = displayName;
+  label.title = displayName;
+  wrap.append(thumb, label);
+  nameTd.append(wrap);
+  return nameTd;
+}
+
+function textCell(className, label, text) {
+  const td = document.createElement('td');
+  td.className = className;
+  td.dataset.label = label;
+  td.textContent = text;
+  return td;
+}
+
+function trashThumb() {
+  const thumb = document.createElement('span');
+  thumb.className = 'file-thumb';
+  thumb.append(iconEl('delete'));
+  return thumb;
+}
+
+function createCard({ entry, title, meta, thumb, onOpen, getItems }) {
+  const card = document.createElement('div');
+  card.className = 'file-card';
+  card.tabIndex = 0;
+  card.setAttribute('aria-label', title);
+  card.style.setProperty('--stagger', String(Math.min(els.fileGrid.children.length, 14)));
+
+  const media = document.createElement('div');
+  media.className = 'file-card-media';
+  media.append(thumb);
+  card.append(media);
+
+  if (entry) {
+    const select = createSelectBox(entry, (checked) => card.classList.toggle('is-selected', checked));
+    select.classList.add('file-card-select');
+    card.append(select);
+  }
+  card.append(createMoreButton(title, card));
+
+  const name = document.createElement('div');
+  name.className = 'file-card-name';
+  name.textContent = title;
+  name.title = title;
+  const metaEl = document.createElement('div');
+  metaEl.className = 'file-card-meta';
+  metaEl.textContent = meta;
+  card.append(name, metaEl);
+
+  if (onOpen) {
+    card.addEventListener('dblclick', onOpen);
+    card.addEventListener('keydown', (e) => {
+      if (e.target === card && e.key === 'Enter') { e.preventDefault(); onOpen(); }
+    });
+  }
+  attachMenu(card, getItems);
+  return card;
+}
+
+function renderFileRows() {
+  const icons = prepareListing('This folder is empty.');
 
   for (const entry of state.entries) {
+    const sizeText = entry.type === 'dir' ? '—' : formatBytes(entry.size);
+
+    if (icons) {
+      els.fileGrid.append(createCard({
+        entry,
+        title: entry.name,
+        meta: entry.type === 'dir' ? 'Folder' : sizeText,
+        thumb: createThumb(entry),
+        onOpen: () => openEntry(entry),
+        getItems: () => entryMenuItems(entry),
+      }));
+      continue;
+    }
+
     const tr = document.createElement('tr');
-
-    const iconTd = document.createElement('td');
-    iconTd.className = 'icon-cell';
-    iconTd.innerHTML = `<span class="material-symbols-outlined">${fileIcon(entry)}</span>`;
-    const select = document.createElement('input');
-    select.type = 'checkbox';
-    select.className = 'file-selection';
-    select.setAttribute('aria-label', `Select ${entry.name}`);
-    select.dataset.fileName = entry.name;
-    select.addEventListener('click', (e) => e.stopPropagation());
-    select.addEventListener('dblclick', (e) => e.stopPropagation());
-    select.addEventListener('change', () => {
-      if (select.checked) selectedFiles.add(entry.name); else selectedFiles.delete(entry.name);
-      updateSelectedFiles();
-    });
-    iconTd.prepend(select);
-    tr.appendChild(iconTd);
-
-    const nameTd = document.createElement('td');
-    nameTd.dataset.label = 'Name';
-    nameTd.textContent = entry.name;
-    tr.appendChild(nameTd);
-
-    const sizeTd = document.createElement('td');
-    sizeTd.dataset.label = 'Size';
-    sizeTd.textContent = entry.type === 'dir' ? '—' : formatBytes(entry.size);
-    tr.appendChild(sizeTd);
-
-    const modifiedTd = document.createElement('td');
-    modifiedTd.dataset.label = 'Modified';
-    modifiedTd.textContent = formatModified(entry.modifiedAt);
-    tr.appendChild(modifiedTd);
+    const selectTd = document.createElement('td');
+    selectTd.className = 'col-select';
+    selectTd.append(createSelectBox(entry));
+    tr.append(selectTd);
+    tr.append(createNameCell(createThumb(entry), entry.name));
+    tr.append(textCell('col-size', 'Size', sizeText));
+    tr.append(textCell('col-modified', 'Modified', formatModified(entry.modifiedAt)));
 
     const actionsTd = document.createElement('td');
-    actionsTd.className = 'actions';
-    if (entry.type === 'file') {
-      const downloadBtn = document.createElement('button');
-      downloadBtn.type = 'button';
-      downloadBtn.className = 'secondary';
-      downloadBtn.textContent = 'Download';
-      downloadBtn.addEventListener('click', () => downloadEntry(entry));
-      actionsTd.appendChild(downloadBtn);
-    }
-    tr.appendChild(actionsTd);
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'icon-btn';
-    more.setAttribute('aria-label', `Actions for ${entry.name}`);
-    more.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">more_vert</span>';
-    more.addEventListener('dblclick', (e) => e.stopPropagation());
-    more.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const rect = more.getBoundingClientRect();
-      tr.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: rect.left, clientY: rect.bottom }));
-    });
-    actionsTd.append(more);
+    actionsTd.className = 'col-actions';
+    const actions = document.createElement('div');
+    actions.className = 'file-row-actions';
+    if (entry.type === 'file') actions.append(iconButton('download', `Download ${entry.name}`, () => downloadEntry(entry)));
+    actions.append(createMoreButton(entry.name, tr));
+    actionsTd.append(actions);
+    tr.append(actionsTd);
 
-    if (entry.type === 'dir') {
-      tr.addEventListener('dblclick', () => {
-        state.currentPath = joinPath(state.currentPath, entry.name);
-        loadBrowse();
-      });
-    } else if (isViewable(entry)) {
-      tr.addEventListener('dblclick', () => openPreviewModal(entry));
-    } else if (isEditableText(entry)) {
-      tr.addEventListener('dblclick', () => openTextEditorModal(entry));
-    } else {
-      tr.addEventListener('dblclick', () => downloadEntry(entry));
-    }
-
-    tr.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const items = [];
-      if (entry.type === 'dir') {
-        items.push({
-          icon: 'folder_open',
-          label: 'Open',
-          onClick: () => {
-            state.currentPath = joinPath(state.currentPath, entry.name);
-            loadBrowse();
-          },
-        });
-      } else {
-        items.push({ icon: 'download', label: 'Download', onClick: () => downloadEntry(entry) });
-        if (isViewable(entry)) items.push({ icon: 'visibility', label: 'View', onClick: () => openPreviewModal(entry) });
-        if (isEditableText(entry)) items.push({ icon: 'edit', label: 'Edit', onClick: () => openTextEditorModal(entry) });
-        items.push({ icon: 'history', label: 'Version history', onClick: () => openVersions(entry) });
-      }
-      items.push({ icon: 'content_copy', label: 'Copy to…', onClick: () => openTransfer('copy', [entry.name]) });
-      items.push({ icon: 'drive_file_move', label: 'Move to…', onClick: () => openTransfer('move', [entry.name]) });
-      items.push({ icon: 'drive_file_rename_outline', label: 'Rename', onClick: () => openRenameModal(entry) });
-      items.push({ icon: 'lock', label: 'Permissions', onClick: () => openPermissionsModal(entry) });
-      items.push({ icon: 'delete', label: 'Move to trash', danger: true, onClick: () => deleteEntry(entry) });
-      showContextMenu(e.clientX, e.clientY, items);
-    });
-
+    tr.addEventListener('dblclick', () => openEntry(entry));
+    attachMenu(tr, () => entryMenuItems(entry));
     els.rows.appendChild(tr);
   }
 }
 
-// Trash entries reuse the same table/row shell as a normal listing (so
+// Trash entries reuse the same table/grid shell as a normal listing (so
 // Trash reads as "a folder you're browsing," not a different UI) but with
-// Restore/Delete-permanently actions instead of Download/context-menu, and
-// no drilling into folders — you restore first, then browse normally.
+// Restore/Delete-permanently actions instead of Download, and no drilling
+// into folders — you restore first, then browse normally.
 function renderTrashRows() {
-  selectedFiles.clear();
-  updateSelectedFiles();
-  els.rows.innerHTML = '';
-  els.fileTable.hidden = state.entries.length === 0;
-  els.emptyState.hidden = state.entries.length > 0;
-  els.emptyState.textContent = 'Trash is empty.';
-  els.resultCount.textContent = state.entries.length ? `${state.entries.length} item${state.entries.length === 1 ? '' : 's'}` : '';
+  const icons = prepareListing('Trash is empty.');
 
   for (const item of state.entries) {
+    const sizeText = item.size ? formatBytes(item.size) : '—';
+
+    if (icons) {
+      els.fileGrid.append(createCard({
+        entry: null,
+        title: item.originalRelPath,
+        meta: `${sizeText} · ${formatModified(item.deletedAt)}`,
+        thumb: trashThumb(),
+        onOpen: null,
+        getItems: () => trashMenuItems(item),
+      }));
+      continue;
+    }
+
     const tr = document.createElement('tr');
-
-    const iconTd = document.createElement('td');
-    iconTd.className = 'icon-cell';
-    iconTd.innerHTML = '<span class="material-symbols-outlined">delete</span>';
-    tr.appendChild(iconTd);
-
-    const nameTd = document.createElement('td');
-    nameTd.dataset.label = 'Name';
-    nameTd.textContent = item.originalRelPath;
-    tr.appendChild(nameTd);
-
-    const sizeTd = document.createElement('td');
-    sizeTd.dataset.label = 'Size';
-    sizeTd.textContent = item.size ? formatBytes(item.size) : '—';
-    tr.appendChild(sizeTd);
-
-    const deletedTd = document.createElement('td');
-    deletedTd.dataset.label = 'Deleted';
-    deletedTd.textContent = formatModified(item.deletedAt);
-    tr.appendChild(deletedTd);
+    const selectTd = document.createElement('td');
+    selectTd.className = 'col-select';
+    tr.append(selectTd);
+    tr.append(createNameCell(trashThumb(), item.originalRelPath));
+    tr.append(textCell('col-size', 'Size', sizeText));
+    tr.append(textCell('col-modified', 'Deleted', formatModified(item.deletedAt)));
 
     const actionsTd = document.createElement('td');
-    actionsTd.className = 'actions';
-    const restoreBtn = document.createElement('button');
-    restoreBtn.type = 'button';
-    restoreBtn.className = 'secondary';
-    restoreBtn.textContent = 'Restore';
-    restoreBtn.addEventListener('click', () => restoreTrashItem(item));
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'danger';
-    deleteBtn.textContent = 'Delete permanently';
-    deleteBtn.addEventListener('click', () => deleteTrashItemPermanently(item));
-    actionsTd.append(restoreBtn, deleteBtn);
-    tr.appendChild(actionsTd);
+    actionsTd.className = 'col-actions';
+    const actions = document.createElement('div');
+    actions.className = 'file-row-actions';
+    actions.append(
+      iconButton('restore_from_trash', `Restore ${item.originalRelPath}`, () => restoreTrashItem(item)),
+      iconButton('delete_forever', `Delete ${item.originalRelPath} permanently`, () => deleteTrashItemPermanently(item), 'file-danger-btn'),
+    );
+    actionsTd.append(actions);
+    tr.append(actionsTd);
+    attachMenu(tr, () => trashMenuItems(item));
 
     els.rows.appendChild(tr);
   }
@@ -495,12 +688,15 @@ els.trashEmptyBtn.addEventListener('click', async () => {
   }
 });
 
-els.fileTable.addEventListener('contextmenu', (e) => {
-  if (e.target.closest('tr')) return; // row's own handler already fired
-  e.preventDefault();
-  if (!state.currentLocationId || state.viewingTrash) return;
-  showContextMenu(e.clientX, e.clientY, [{ icon: 'create_new_folder', label: 'New folder here', onClick: openMkdirModal }]);
-});
+for (const container of [els.fileTable, els.fileGrid]) {
+  container.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('tbody tr, .file-card')) return; // item's own handler already fired
+    e.preventDefault();
+    if (!state.currentLocationId || state.viewingTrash) return;
+    showContextMenu(e.clientX, e.clientY, [{ icon: 'create_new_folder', label: 'New folder here', onClick: openMkdirModal }]);
+  });
+}
+applyViewControls();
 
 function downloadEntry(entry) {
   const p = joinPath(state.currentPath, entry.name);

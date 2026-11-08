@@ -77,6 +77,27 @@
           <nav class="breadcrumb" id="breadcrumb" aria-label="Current folder"></nav>
           <button type="button" id="trash-empty-btn" class="danger" hidden>Empty trash</button>
           <span id="result-count"></span>
+          <div class="file-view-controls">
+            <div class="view-toggle file-size-toggle" id="file-size-toggle" role="group" aria-label="Icon size" hidden>
+              <button type="button" class="view-btn" data-icon-size="small" title="Small icons" aria-label="Small icons">
+                <span class="material-symbols-outlined" aria-hidden="true">apps</span>
+              </button>
+              <button type="button" class="view-btn" data-icon-size="medium" title="Medium icons" aria-label="Medium icons">
+                <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
+              </button>
+              <button type="button" class="view-btn" data-icon-size="large" title="Large icons" aria-label="Large icons">
+                <span class="material-symbols-outlined" aria-hidden="true">photo_library</span>
+              </button>
+            </div>
+            <div class="view-toggle" role="group" aria-label="View mode">
+              <button type="button" class="view-btn" data-file-view="list" title="List view" aria-label="List view">
+                <span class="material-symbols-outlined" aria-hidden="true">view_list</span>
+              </button>
+              <button type="button" class="view-btn" data-file-view="icons" title="Icon view" aria-label="Icon view">
+                <span class="material-symbols-outlined" aria-hidden="true">grid_on</span>
+              </button>
+            </div>
+          </div>
           <button type="button" id="file-sync-btn" class="secondary"><span class="material-symbols-outlined" aria-hidden="true">sync</span>Sync devices</button>
         </div>
         <div id="file-bulk-bar" class="toolbar" hidden aria-label="Selected file actions">
@@ -97,15 +118,17 @@
         <table class="file-table" id="file-list" hidden>
           <thead>
             <tr>
-              <th></th>
-              <th>Name</th>
-              <th>Size</th>
-              <th id="modified-header">Modified</th>
-              <th></th>
+              <th class="col-select"><span class="visually-hidden">Select</span></th>
+              <th class="col-name">Name</th>
+              <th class="col-size">Size</th>
+              <th class="col-modified" id="modified-header">Modified</th>
+              <th class="col-actions"><span class="visually-hidden">Actions</span></th>
             </tr>
           </thead>
           <tbody id="file-rows"></tbody>
         </table>
+
+        <div class="file-grid" id="file-grid" data-icon-size="medium" hidden></div>
 
         <p id="empty-state" class="empty-state" hidden>This folder is empty.</p>
         <p id="select-location-state" class="empty-state">Choose a location from the sidebar to start browsing.</p>
