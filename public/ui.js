@@ -1,20 +1,333 @@
 (function () {
-  // Keep the same navigation and action hierarchy on every workspace page.
+  /* ---------- Workspace shell ----------
+     Every app page ships the same plain markup (top bar, <nav class="nav">,
+     optional .sidebar, main.content). This rebuilds it into one consistent,
+     Google-Workspace-style layout so the pages don't each carry their own copy:
+
+       top bar   menu · logo + app name · search · settings, theme, account
+       app rail  one icon per app, far left (a drawer section on mobile)
+       sidebar   the page's primary "New" action, then its folders/filters
+       sheet     main.content on a rounded surface, with a compact title row
+                 and a ⋮ menu gathering the page's secondary actions
+
+     Elements keep their ids and listeners; they are only moved, so page
+     scripts don't need to know about any of this. */
+  const NAV_ICONS = {
+    Bookmarks: 'bookmarks',
+    Contacts: 'contacts',
+    Calendar: 'calendar_month',
+    Files: 'folder',
+    Passwords: 'key',
+    Settings: 'settings',
+  };
+  const SETTINGS_TAB_ICONS = {
+    account: 'account_circle',
+    general: 'tune',
+    bookmarks: 'bookmarks',
+    files: 'folder',
+    passwords: 'key',
+    contacts: 'contacts',
+    calendar: 'calendar_month',
+  };
+  const COLLAPSED_KEY = 'syncmark:sidebarCollapsed';
+  const mobileQuery = window.matchMedia('(max-width: 820px)');
+
+  function symbol(name, className) {
+    const span = document.createElement('span');
+    span.className = `material-symbols-outlined${className ? ` ${className}` : ''}`;
+    span.setAttribute('aria-hidden', 'true');
+    span.textContent = name;
+    return span;
+  }
+
+  // An element's visible label without its Material Symbols ligature text.
+  function plainLabel(el) {
+    const text = [...el.childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text || el.getAttribute('aria-label') || el.title || el.textContent.trim();
+  }
+
+  function iconOf(el, fallback) {
+    return el.dataset.icon || el.querySelector('.material-symbols-outlined')?.textContent.trim() || fallback;
+  }
+
+  // Shared by page scripts for per-row actions: swaps a text button for a
+  // compact icon button that keeps an accessible name and tooltip.
+  window.iconizeButton = function iconizeButton(btn, icon, label) {
+    const name = label || btn.textContent.trim();
+    btn.classList.add('row-action');
+    btn.title = name;
+    btn.setAttribute('aria-label', name);
+    btn.replaceChildren(symbol(icon));
+    return btn;
+  };
+
+  const shell = document.getElementById('app-shell');
   const workspaceNav = document.querySelector('nav.nav');
   const workspaceMain = document.querySelector('main.content');
-  if (workspaceNav && workspaceMain) {
-    document.getElementById('app-shell').classList.add('has-workspace-nav');
-    workspaceNav.setAttribute('aria-label', 'Main navigation');
-    const icons = { Bookmarks: 'bookmarks', Contacts: 'contacts', Calendar: 'calendar_month', Files: 'folder', Passwords: 'key', Settings: 'settings', Admin: 'admin_panel_settings' };
+  if (shell && workspaceNav && workspaceMain) buildWorkspaceShell();
+
+  function buildWorkspaceShell() {
+    shell.classList.add('has-workspace-nav', 'gw-shell');
+    const topbar = shell.querySelector('.topbar');
+    const topbarLeft = topbar.querySelector('.topbar-left');
+    const topbarActions = topbar.querySelector('.topbar-actions');
+    const layout = shell.querySelector('.layout');
+    const brand = topbarLeft.querySelector('.brand');
+
+    const activeLink = workspaceNav.querySelector('a.active');
+    const appName = activeLink ? activeLink.textContent.trim() : 'Workspace';
+    shell.dataset.app = appName.toLowerCase();
+
+    /* App rail: icon above label, Gmail-style. Settings moves to the top bar. */
+    workspaceNav.setAttribute('aria-label', 'Apps');
+    const settingsLink = workspaceNav.querySelector('a[href="settings.html"]');
     workspaceNav.querySelectorAll('a').forEach((link) => {
       const label = link.textContent.trim();
-      const icon = document.createElement('span');
-      icon.className = 'material-symbols-outlined';
-      icon.setAttribute('aria-hidden', 'true');
-      icon.textContent = icons[label] || 'dashboard';
-      link.prepend(icon);
+      const pill = document.createElement('span');
+      pill.className = 'rail-pill';
+      pill.append(symbol(NAV_ICONS[label] || 'apps'));
+      const text = document.createElement('span');
+      text.className = 'rail-label';
+      text.textContent = label;
+      link.replaceChildren(pill, text);
       if (link.classList.contains('active')) link.setAttribute('aria-current', 'page');
     });
+    const drawerNav = workspaceNav.cloneNode(true);
+    if (settingsLink) settingsLink.remove();
+    const rail = document.createElement('aside');
+    rail.className = 'app-rail';
+    rail.append(workspaceNav);
+    layout.prepend(rail);
+
+    /* Top bar: menu button, logo + current app, then utility icons. */
+    const menuBtn = document.createElement('button');
+    menuBtn.type = 'button';
+    menuBtn.className = 'icon-btn gw-menu-btn';
+    menuBtn.setAttribute('aria-label', 'Main menu');
+    menuBtn.title = 'Main menu';
+    menuBtn.append(symbol('menu'));
+    topbarLeft.prepend(menuBtn);
+    if (brand) {
+      brand.setAttribute('aria-label', `SyncMark ${appName}`);
+      const appLabel = document.createElement('span');
+      appLabel.className = 'brand-app';
+      appLabel.textContent = appName;
+      brand.append(appLabel);
+    }
+    const gear = document.createElement('a');
+    gear.href = 'settings.html';
+    gear.className = 'icon-btn topbar-icon-btn';
+    gear.title = 'Settings';
+    gear.setAttribute('aria-label', 'Settings');
+    gear.append(symbol('settings'));
+    if (settingsLink?.classList.contains('active')) {
+      gear.classList.add('active');
+      gear.setAttribute('aria-current', 'page');
+    }
+    topbarActions.insertBefore(gear, topbarActions.querySelector('.account-menu'));
+
+    // The account button becomes avatar-only; the name moves into the menu.
+    const accountBtn = document.getElementById('account-menu-trigger');
+    const accountName = document.getElementById('account-username');
+    const accountDropdown = document.getElementById('account-dropdown');
+    if (accountBtn && accountName && accountDropdown) {
+      accountBtn.setAttribute('aria-label', 'Account menu');
+      accountBtn.title = 'Account';
+      const header = document.createElement('div');
+      header.className = 'account-dropdown-header';
+      const signedIn = document.createElement('span');
+      signedIn.className = 'account-dropdown-caption';
+      signedIn.textContent = 'Signed in as';
+      header.append(signedIn, accountName);
+      accountDropdown.prepend(header);
+    }
+
+    /* Sidebar: every page gets one (Settings uses it for its sections). */
+    let sidebar = layout.querySelector('.sidebar');
+    if (!sidebar) {
+      sidebar = document.createElement('aside');
+      sidebar.className = 'sidebar';
+      layout.insertBefore(sidebar, workspaceMain);
+    }
+    sidebar.id ||= 'workspace-sidebar';
+    sidebar.setAttribute('aria-label', `${appName} sidebar`);
+    menuBtn.setAttribute('aria-controls', sidebar.id);
+
+    const settingsTabs = workspaceMain.querySelector('.settings-tabs');
+    if (settingsTabs) {
+      settingsTabs.setAttribute('aria-orientation', 'vertical');
+      settingsTabs.querySelectorAll('.settings-tab').forEach((tab) => {
+        tab.prepend(symbol(SETTINGS_TAB_ICONS[tab.dataset.tab] || 'tune'));
+      });
+      sidebar.prepend(settingsTabs);
+    }
+
+    /* Primary action: the big "New" button at the top of the sidebar. One
+       action is moved there as-is; several (Files: folder + upload) become a
+       "New" button that opens a menu of them. */
+    const primary = [...topbarActions.querySelectorAll(':scope > button:not(.theme-toggle), :scope > label.button')];
+    const compose = document.createElement('div');
+    compose.className = 'sidebar-compose';
+    if (primary.length === 1) {
+      primary[0].classList.remove('secondary');
+      primary[0].classList.add('compose-btn');
+      compose.append(primary[0]);
+    } else if (primary.length > 1) {
+      const holder = document.createElement('div');
+      holder.hidden = true;
+      primary.forEach((el) => holder.append(el));
+      const newBtn = document.createElement('button');
+      newBtn.type = 'button';
+      newBtn.className = 'button compose-btn';
+      newBtn.setAttribute('aria-haspopup', 'menu');
+      newBtn.append(symbol('add'), document.createTextNode('New'));
+      newBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rect = newBtn.getBoundingClientRect();
+        window.showContextMenu(rect.left, rect.bottom + 6, primary.filter((el) => !el.hidden && !el.disabled).map((el) => ({
+          label: plainLabel(el),
+          icon: iconOf(el, 'add'),
+          onClick: () => el.click(),
+        })));
+      });
+      compose.append(newBtn, holder);
+    }
+    topbarActions.querySelectorAll(':scope > input[type="file"]').forEach((input) => compose.append(input));
+    // Desktop: top of the sidebar. Mobile: a floating action button, which
+    // can't live inside the drawer (its transform would trap position:fixed).
+    function placeCompose() {
+      if (!compose.childElementCount) return;
+      compose.classList.toggle('is-fab', mobileQuery.matches);
+      if (mobileQuery.matches) shell.append(compose);
+      else sidebar.prepend(compose);
+    }
+    placeCompose();
+    mobileQuery.addEventListener('change', placeCompose);
+
+    /* Mobile: the sidebar is a drawer, and app switching lives at its foot. */
+    const drawerApps = document.createElement('div');
+    drawerApps.className = 'drawer-apps';
+    const drawerHeading = document.createElement('h2');
+    drawerHeading.textContent = 'Apps';
+    drawerNav.classList.add('drawer-nav');
+    drawerNav.setAttribute('aria-label', 'Apps');
+    drawerApps.append(drawerHeading, drawerNav);
+    sidebar.append(drawerApps);
+
+    /* Title row inside the content sheet. Files (breadcrumb) and Calendar
+       (month label) already title themselves, so they skip the heading. */
+    const titled = workspaceMain.querySelector('.breadcrumb, .calendar-toolbar');
+    const heading = document.createElement('div');
+    heading.className = 'workspace-heading';
+    if (!titled) {
+      // Title follows the active sidebar item ("Favorites", "Work", "Account"…),
+      // since the app name is already in the top bar.
+      const title = document.createElement('h2');
+      const sectionTitle = () => {
+        const active = sidebar.querySelector('.folder-btn.active, .settings-tab.active');
+        if (!active) return appName;
+        const label = active.querySelector('.folder-label');
+        return (label ? label.textContent : plainLabel(active)).trim() || appName;
+      };
+      const syncTitle = () => {
+        const next = sectionTitle();
+        if (title.textContent !== next) title.textContent = next;
+      };
+      syncTitle();
+      new MutationObserver(syncTitle).observe(sidebar, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+      heading.append(title);
+    }
+    const headingActions = document.createElement('div');
+    headingActions.className = 'workspace-actions';
+    heading.append(headingActions);
+
+    const overflow = [...workspaceMain.querySelectorAll('[data-overflow]')];
+    if (overflow.length) {
+      const moreBtn = document.createElement('button');
+      moreBtn.type = 'button';
+      moreBtn.className = 'icon-btn page-more-btn';
+      moreBtn.title = 'More actions';
+      moreBtn.setAttribute('aria-label', 'More actions');
+      moreBtn.setAttribute('aria-haspopup', 'menu');
+      moreBtn.append(symbol('more_vert'));
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rect = moreBtn.getBoundingClientRect();
+        const items = overflow
+          .filter((el) => !el.hidden && !el.disabled && !el.closest('[hidden]:not([data-overflow])'))
+          .map((el) => ({ label: plainLabel(el), icon: iconOf(el, 'chevron_right'), onClick: () => el.click() }));
+        window.showContextMenu(rect.right - 280, rect.bottom + 6, items);
+      });
+      headingActions.append(moreBtn);
+    }
+    if (!titled) {
+      workspaceMain.prepend(heading);
+    } else if (overflow.length) {
+      // Files' toolbar / Calendar's toolbar host the ⋮ menu directly.
+      titled.closest('.toolbar, .calendar-toolbar').append(headingActions);
+    }
+
+    /* Menu button: collapses the sidebar on desktop, opens it as a drawer on
+       mobile. */
+    const backdrop = document.createElement('div');
+    backdrop.className = 'sidebar-backdrop';
+    document.body.appendChild(backdrop);
+
+    function setDrawer(open) {
+      sidebar.classList.toggle('is-open', open);
+      backdrop.classList.toggle('is-open', open);
+      document.body.classList.toggle('sidebar-drawer-open', open);
+      menuBtn.setAttribute('aria-expanded', String(open));
+    }
+    function syncMenuState() {
+      if (mobileQuery.matches) {
+        menuBtn.setAttribute('aria-expanded', String(sidebar.classList.contains('is-open')));
+      } else {
+        setDrawer(false);
+        menuBtn.setAttribute('aria-expanded', String(!shell.classList.contains('sidebar-collapsed')));
+      }
+    }
+    if (localStorage.getItem(COLLAPSED_KEY) === '1') shell.classList.add('sidebar-collapsed');
+    syncMenuState();
+    mobileQuery.addEventListener('change', syncMenuState);
+
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (mobileQuery.matches) {
+        setDrawer(!sidebar.classList.contains('is-open'));
+        if (sidebar.classList.contains('is-open')) sidebar.querySelector('a, button')?.focus();
+        return;
+      }
+      const collapsed = shell.classList.toggle('sidebar-collapsed');
+      localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
+      syncMenuState();
+    });
+    backdrop.addEventListener('click', () => setDrawer(false));
+    sidebar.addEventListener('click', (e) => {
+      if (!mobileQuery.matches) return;
+      const target = e.target.closest('a, button');
+      // "Manage folders"/"Manage groups"/"New" open something on top of the
+      // drawer, and chevrons only expand a folder — keep the drawer for those.
+      if (!target || target.matches('#manage-folders-btn, #manage-groups-btn, .compose-btn, .folder-chevron')) return;
+      setDrawer(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && sidebar.classList.contains('is-open')) {
+        setDrawer(false);
+        menuBtn.focus();
+      }
+    });
+
     workspaceMain.id ||= 'main-content';
     workspaceMain.tabIndex = -1;
     const skip = document.createElement('a');
@@ -22,30 +335,6 @@
     skip.href = `#${workspaceMain.id}`;
     skip.textContent = 'Skip to content';
     document.body.prepend(skip);
-    const active = workspaceNav.querySelector('a.active');
-    const title = active ? active.textContent.replace(active.querySelector('span').textContent, '').trim() : 'Workspace';
-    const descriptions = {
-      Bookmarks: 'Your favorite places, all in one place.',
-      Contacts: 'Keep your people and groups close.',
-      Calendar: 'Make room for what matters.',
-      Files: 'A home for everything you need.',
-      Passwords: 'Your credentials, securely organized.',
-      Settings: 'Make SyncMark work for you.',
-    };
-    const heading = document.createElement('div');
-    heading.className = 'workspace-heading';
-    const copy = document.createElement('div');
-    const headingTitle = document.createElement('h2');
-    headingTitle.textContent = title;
-    const description = document.createElement('p');
-    description.textContent = descriptions[title] || 'Manage your workspace.';
-    copy.append(headingTitle, description);
-    heading.append(copy);
-    const actions = document.createElement('div');
-    actions.className = 'workspace-actions';
-    document.querySelectorAll('.topbar-actions > button:not(.theme-toggle), .topbar-actions > label.button, .topbar-actions > input[type="file"]').forEach((el) => actions.append(el));
-    heading.append(actions);
-    workspaceMain.prepend(heading);
     document.querySelectorAll('input[type="search"]').forEach((input) => {
       if (!input.getAttribute('aria-label')) input.setAttribute('aria-label', input.placeholder || 'Search');
     });
@@ -397,91 +686,6 @@
     }
   }
 
-  /* Mobile nav: injects a hamburger button before .nav so the 5 top-level
-     links collapse into a dropdown below the mobile breakpoint instead of
-     wrapping in place — CSS (.mobile-nav-toggle / .nav.nav-open) does the
-     rest. No-ops harmlessly if .nav isn't on the page. */
-  function initMobileNav() {
-    const nav = document.querySelector('.nav');
-    const topbarLeft = document.querySelector('.topbar-left');
-    if (!nav || !topbarLeft) return;
-
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'icon-btn mobile-nav-toggle';
-    toggle.setAttribute('aria-label', 'Menu');
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.innerHTML = '<span class="material-symbols-outlined">menu</span>';
-    topbarLeft.insertBefore(toggle, nav);
-
-    function closeNav() {
-      nav.classList.remove('nav-open');
-      toggle.setAttribute('aria-expanded', 'false');
-    }
-
-    toggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = nav.classList.toggle('nav-open');
-      toggle.setAttribute('aria-expanded', String(isOpen));
-    });
-    nav.addEventListener('click', (e) => {
-      if (e.target.closest('a')) closeNav();
-    });
-    document.addEventListener('click', (e) => {
-      if (nav.classList.contains('nav-open') && !nav.contains(e.target) && e.target !== toggle) closeNav();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeNav();
-    });
-  }
-
-  /* Mobile sidebar drawer: only runs on pages with a .sidebar (Bookmarks/
-     Contacts/Files — not Calendar or Settings). Injects a toggle button at
-     the top of .content, labeled from the sidebar's own heading, plus a
-     backdrop appended to body. CSS (.sidebar.is-open / .sidebar-backdrop)
-     does the actual slide-in. */
-  function initSidebarDrawer() {
-    const sidebar = document.querySelector('.sidebar');
-    const content = document.querySelector('.content');
-    if (!sidebar || !content) return;
-
-    const label = sidebar.querySelector('.sidebar-header h2')?.textContent || 'Menu';
-
-    const backdrop = document.createElement('div');
-    backdrop.className = 'sidebar-backdrop';
-    document.body.appendChild(backdrop);
-
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'button secondary mobile-sidebar-toggle';
-    toggle.innerHTML = `<span class="material-symbols-outlined">menu</span>${label}`;
-    content.insertBefore(toggle, content.firstChild);
-
-    function closeSidebar() {
-      sidebar.classList.remove('is-open');
-      backdrop.classList.remove('is-open');
-      document.body.classList.remove('sidebar-drawer-open');
-    }
-
-    toggle.addEventListener('click', () => {
-      sidebar.classList.add('is-open');
-      backdrop.classList.add('is-open');
-      document.body.classList.add('sidebar-drawer-open');
-    });
-    backdrop.addEventListener('click', closeSidebar);
-    sidebar.addEventListener('click', (e) => {
-      const target = e.target.closest('a, button');
-      // "Manage folders"/"Manage groups" open their own modal on top of the
-      // drawer — closing the drawer out from under that modal would be
-      // jarring, so only real navigation (everything else) closes it.
-      if (!target || target.id === 'manage-folders-btn' || target.id === 'manage-groups-btn') return;
-      closeSidebar();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeSidebar();
-    });
-  }
-
   /* Long-press → context menu: calendar.js and files.js already listen for
      the "contextmenu" event (not a mouse-specific one), so synthesizing that
      same event after a touch-and-hold makes their existing quick-action
@@ -618,15 +822,11 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       initAccountMenu();
-      initMobileNav();
-      initSidebarDrawer();
       initThemeToggle();
       initListStagger();
     });
   } else {
     initAccountMenu();
-    initMobileNav();
-    initSidebarDrawer();
     initThemeToggle();
     initListStagger();
   }

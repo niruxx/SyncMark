@@ -813,7 +813,7 @@ function makeEditButton(bookmark) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'secondary';
-  btn.textContent = 'Edit';
+  window.iconizeButton(btn, 'edit', `Edit ${bookmark.title}`);
   btn.addEventListener('click', () => openModal('edit', bookmark));
   return btn;
 }
@@ -821,8 +821,8 @@ function makeEditButton(bookmark) {
 function makeDeleteButton(bookmark) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.textContent = 'Delete';
   btn.className = 'danger';
+  window.iconizeButton(btn, 'delete', `Delete ${bookmark.title}`);
   btn.addEventListener('click', () => deleteBookmark(bookmark));
   return btn;
 }

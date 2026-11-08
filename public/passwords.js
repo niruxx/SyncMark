@@ -534,17 +534,17 @@ function renderPasswords() {
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className = 'secondary';
-    editBtn.textContent = 'Edit';
+    window.iconizeButton(editBtn, 'edit', `Edit ${entry.site_name}`);
     editBtn.addEventListener('click', () => openModal('edit', entry.id));
 
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className = 'danger';
-    deleteBtn.textContent = 'Delete';
+    window.iconizeButton(deleteBtn, 'delete', `Delete ${entry.site_name}`);
     deleteBtn.addEventListener('click', () => deletePassword(entry));
 
     const shareBtn = document.createElement('button');
-    shareBtn.type = 'button'; shareBtn.className = 'secondary'; shareBtn.textContent = 'Share';
+    shareBtn.type = 'button'; shareBtn.className = 'secondary'; window.iconizeButton(shareBtn, 'share', `Share ${entry.site_name}`);
     shareBtn.addEventListener('click', () => window.passwordTools.share(entry));
     actionsTd.append(starBtn, editBtn, deleteBtn, shareBtn);
     tr.appendChild(actionsTd);

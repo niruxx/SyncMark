@@ -17,6 +17,7 @@ const els = {
   todayBtn: document.getElementById('cal-today-btn'),
   monthLabel: document.getElementById('cal-month-label'),
   grid: document.getElementById('calendar-grid'),
+  miniCalendar: document.getElementById('mini-calendar'),
 
   dayPanel: document.getElementById('calendar-day-panel'),
   dayPanelHeading: document.getElementById('calendar-day-panel-heading'),
@@ -318,6 +319,64 @@ function renderGrid() {
     els.grid.appendChild(cell);
     cursor.setDate(cursor.getDate() + 1);
   }
+
+  renderMiniCalendar(gridStart, buckets, todayKey);
+}
+
+// Sidebar mini-month (Google Calendar-style): mirrors the main grid's month,
+// marks days that have events, and jumps the main view to a clicked date.
+function renderMiniCalendar(gridStart, buckets, todayKey) {
+  if (!els.miniCalendar) return;
+  els.miniCalendar.replaceChildren();
+
+  const header = document.createElement('div');
+  header.className = 'mini-calendar-header';
+  const label = document.createElement('span');
+  label.className = 'mini-calendar-label';
+  label.textContent = formatMonthLabel(state.viewMonth);
+  const navButton = (icon, title, delta) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-btn';
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+    btn.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${icon}</span>`;
+    btn.addEventListener('click', () => goToMonth(delta));
+    return btn;
+  };
+  header.append(label, navButton('chevron_left', 'Previous month', -1), navButton('chevron_right', 'Next month', 1));
+
+  const grid = document.createElement('div');
+  grid.className = 'mini-calendar-grid';
+  for (const day of ['S', 'M', 'T', 'W', 'T', 'F', 'S']) {
+    const head = document.createElement('span');
+    head.className = 'mini-calendar-weekday';
+    head.setAttribute('aria-hidden', 'true');
+    head.textContent = day;
+    grid.appendChild(head);
+  }
+  const cursor = new Date(gridStart);
+  for (let i = 0; i < GRID_DAYS; i += 1) {
+    const date = new Date(cursor);
+    const key = localDayKey(date.getFullYear(), date.getMonth(), date.getDate());
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mini-calendar-day';
+    if (date.getMonth() !== state.viewMonth.getMonth()) btn.classList.add('is-outside');
+    if (key === todayKey) btn.classList.add('is-today');
+    if (key === state.selectedDateKey) btn.classList.add('is-selected');
+    if (buckets.has(key)) btn.classList.add('has-events');
+    btn.textContent = String(date.getDate());
+    btn.setAttribute('aria-label', date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }));
+    if (key === todayKey) btn.setAttribute('aria-current', 'date');
+    btn.addEventListener('click', () => {
+      state.viewMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      selectDate(date);
+    });
+    grid.appendChild(btn);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  els.miniCalendar.append(header, grid);
 }
 
 // Clicking a date expands the day panel on the right (calendar shrinks to

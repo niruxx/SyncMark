@@ -60,7 +60,7 @@
   }
   function actions(bookmark) {
     const node = button('More', () => {});
-    node.setAttribute('aria-label', `More actions for ${bookmark.title}`);
+    window.iconizeButton(node, 'more_vert', `More actions for ${bookmark.title}`);
     node.addEventListener('click', (event) => {
       event.stopPropagation();
       const rect = node.getBoundingClientRect();

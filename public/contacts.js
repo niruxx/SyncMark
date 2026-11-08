@@ -345,13 +345,13 @@ function renderContacts() {
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className = 'secondary';
-    editBtn.textContent = 'Edit';
+    window.iconizeButton(editBtn, 'edit', `Edit ${contact.full_name}`);
     editBtn.addEventListener('click', () => openModal('edit', contact.id));
 
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className = 'danger';
-    deleteBtn.textContent = 'Delete';
+    window.iconizeButton(deleteBtn, 'delete', `Delete ${contact.full_name}`);
     deleteBtn.addEventListener('click', () => deleteContact(contact));
 
     actionsTd.append(starBtn, editBtn, deleteBtn);

@@ -94,20 +94,20 @@
             <option value="created-desc">Newest first</option>
             <option value="created-asc">Oldest first</option>
           </select>
-          <label class="button secondary" for="import-contacts-file">
+          <label class="button secondary" for="import-contacts-file" data-overflow>
             <span class="material-symbols-outlined">upload_file</span>
             Import
           </label>
           <input type="file" id="import-contacts-file" accept=".vcf,.csv" hidden />
-          <a class="button secondary" href="/api/contacts/export" download>
+          <a class="button secondary" href="/api/contacts/export" download data-overflow>
             <span class="material-symbols-outlined">download</span>
             Export .vcf
           </a>
-          <a class="button secondary" href="/api/contacts/export?format=csv" download>
+          <a class="button secondary" href="/api/contacts/export?format=csv" download data-overflow>
             <span class="material-symbols-outlined">download</span>
             Export .csv
           </a>
-          <button type="button" id="find-duplicates-btn" class="button secondary">
+          <button type="button" id="find-duplicates-btn" class="button secondary" data-overflow>
             <span class="material-symbols-outlined">join</span>
             Find duplicates
           </button>
